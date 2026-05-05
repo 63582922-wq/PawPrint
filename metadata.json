@@ -1,0 +1,6 @@
+{
+  "name": "PawPrint AI",
+  "description": "An AI-powered pet companion app that creates a digital twin of your pet and generates interactive first-person videos.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
