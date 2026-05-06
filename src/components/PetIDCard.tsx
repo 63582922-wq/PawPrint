@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PetID } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Share2, Download, RotateCcw, ShieldCheck, MapPin, Calendar, Fingerprint, Send, Loader2 } from 'lucide-react';
+import { Share2, Download, RotateCcw, ShieldCheck, Fingerprint, Send, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { chatWithPet } from '../services/geminiService';
 
@@ -90,7 +90,12 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
         console.error("Error sharing:", err);
       }
     } else {
-      alert(t.shareProfile + " - URL Copied!");
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        alert(t.linkCopied || "Link copied.");
+      } catch (e) {
+        alert(window.location.href);
+      }
     }
   };
 
@@ -128,7 +133,17 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
             <div className="grid grid-cols-2 gap-4">
               <InfoItem label={t.breed} value={pet.breed} />
               <InfoItem label={t.idNumber} value={pet.id.toUpperCase()} />
-              <InfoItem label={t.birthDate} value={pet.birthday} />
+              <InfoItem
+                label={t.gender || "Gender"}
+                value={
+                  pet.gender === "Male"
+                    ? (t.genderMale || "Male")
+                    : pet.gender === "Female"
+                      ? (t.genderFemale || "Female")
+                      : "—"
+                }
+              />
+              <InfoItem label={t.birthDate} value={pet.birthday || "—"} />
               <InfoItem label={t.issueDate} value={new Date(pet.createdAt).toLocaleDateString()} />
             </div>
 
@@ -194,7 +209,7 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
                 animate={{ opacity: 1, y: 0 }}
                 className="w-full"
               >
-                {lastPetReply || t.diarySample.replace('{name}', pet.name)} {!lastPetReply && "🦋"}
+                {lastPetReply || t.diarySample.replace('{name}', pet.name)}
               </motion.p>
             )}
           </AnimatePresence>

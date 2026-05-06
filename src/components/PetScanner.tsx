@@ -3,7 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, X, Loader2, Sparkles, Wand2, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetID } from '../types';
-import { generateCharacterSheet } from '../services/geminiService';
+import { analyzePetProfileFromImages, ensureTempPublicImageUrl, generateCharacterSheet } from '../services/geminiService';
 import { cn } from '../lib/utils';
 
 interface PetScannerProps {
@@ -15,6 +15,8 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
   const [images, setImages] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [petName, setPetName] = useState("");
+  const [petGender, setPetGender] = useState<string>("Unknown");
+  const [petBirthday, setPetBirthday] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
@@ -50,28 +52,50 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
     setErrorStatus(null);
     
     try {
-      const analysis = {
-        breed: "Unknown Breed",
+      let isProd = false;
+      try {
+        isProd = !!(import.meta as any)?.env?.PROD;
+      } catch (e) {}
+
+      let analysis: { breed: string; characteristics: string[]; visualPrompt: string } = {
+        breed: "Unknown",
         characteristics: [],
         visualPrompt: "Match the pet in the reference image exactly.",
       };
+
+      try {
+        setStatus(t.analyzing || "Analyzing appearance...");
+        analysis = await analyzePetProfileFromImages(images);
+      } catch (e) {
+        analysis = {
+          breed: "Unknown",
+          characteristics: [],
+          visualPrompt: "Match the pet in the reference image exactly.",
+        };
+      }
       
       // Generate Character Sheet Image
       const characterSheetUrl = await generateCharacterSheet(analysis.visualPrompt, images[0]);
       
       setStatus(t.generatingCard || "Finalizing ID Card...");
-      await new Promise(r => setTimeout(r, 1000));
+
+      const avatarOrRef = images[0];
+      const finalAvatarUrl = isProd ? await ensureTempPublicImageUrl(avatarOrRef, "pawprint-avatar") : avatarOrRef;
+      const finalRefUrl = isProd ? await ensureTempPublicImageUrl(avatarOrRef, "pawprint-ref") : avatarOrRef;
+      const finalCharacterSheetUrl = isProd
+        ? await ensureTempPublicImageUrl(characterSheetUrl, "pawprint-card")
+        : characterSheetUrl;
 
       const newPet: PetID = {
         id: Math.random().toString(36).substr(2, 9),
         name: petName,
-        breed: analysis?.breed || "Unknown Breed",
-        gender: "Unknown",
-        birthday: new Date().toISOString().split('T')[0],
-        characteristics: analysis?.characteristics || ["Cute", "Friendly"],
-        avatarUrl: images[0], // Use first uploaded image as avatar
-        referencePhotoUrl: images[0],
-        characterSheetUrl: characterSheetUrl,
+        breed: analysis?.breed || "Unknown",
+        gender: petGender || "Unknown",
+        birthday: petBirthday || "",
+        characteristics: analysis?.characteristics || [],
+        avatarUrl: finalAvatarUrl,
+        referencePhotoUrl: finalRefUrl,
+        characterSheetUrl: finalCharacterSheetUrl,
         createdAt: Date.now(),
       };
 
@@ -118,6 +142,34 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
               !petName && images.length > 0 ? "ring-orange-500" : "ring-gray-100"
             )}
           />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-400">
+              {t.gender || "Gender"} {t.optional || "(Optional / 可选)"}
+            </label>
+            <select
+              value={petGender}
+              onChange={(e) => setPetGender(e.target.value)}
+              className="w-full rounded-2xl border-none bg-white p-4 text-sm font-medium shadow-sm ring-1 ring-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="Unknown">{t.genderUnknown || "Unknown / 未知"}</option>
+              <option value="Male">{t.genderMale || "Male / 公"}</option>
+              <option value="Female">{t.genderFemale || "Female / 母"}</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-400">
+              {t.birthDate} {t.optional || "(Optional / 可选)"}
+            </label>
+            <input
+              type="date"
+              value={petBirthday}
+              onChange={(e) => setPetBirthday(e.target.value)}
+              className="w-full rounded-2xl border-none bg-white p-4 text-sm font-medium shadow-sm ring-1 ring-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
         </div>
 
         <div

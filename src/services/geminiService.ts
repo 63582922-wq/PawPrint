@@ -49,6 +49,61 @@ async function geminiGenerateContent(model: string, body: any) {
   return JSON.parse(text || "{}");
 }
 
+function extractTextFromGeminiJson(json: any): string {
+  const cand = (json?.candidates || [])[0];
+  const parts = cand?.content?.parts || [];
+  const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+  return String(text || "");
+}
+
+export async function analyzePetProfileFromImages(imageDatas: string[]) {
+  const prompt = `Analyze the pet in the provided photos.
+Return ONLY valid JSON with this schema:
+{
+  "breed": string,
+  "characteristics": string[],
+  "visualPrompt": string
+}
+Rules:
+- "breed": best guess; use "Unknown" if unsure.
+- "characteristics": 4-10 short phrases describing unique visible traits (colors, markings, ear shape, tail, fur length, eye color, muzzle shape).
+- "visualPrompt": a short, strict description to recreate the exact same pet consistently (no style words, no anime/cartoon, no text).
+No markdown, no extra keys.`;
+
+  const normalizedImages = await Promise.all(
+    imageDatas.slice(0, 3).map((d) =>
+      downscaleImageDataUrlIfNeeded(d, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
+    )
+  );
+
+  const imageParts = normalizedImages.map((data) => {
+    const parsed = parseDataUrl(data);
+    return { inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } };
+  });
+
+  const json = await withNetworkRetries(() =>
+    geminiGenerateContent("gemini-2.5-flash", {
+      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+      generationConfig: { responseMimeType: "application/json" },
+    })
+  );
+
+  const text = extractTextFromGeminiJson(json);
+  const parsed = JSON.parse(text || "{}");
+
+  const breed = typeof parsed?.breed === "string" ? parsed.breed.trim() : "";
+  const characteristics = Array.isArray(parsed?.characteristics)
+    ? parsed.characteristics.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 12)
+    : [];
+  const visualPrompt = typeof parsed?.visualPrompt === "string" ? parsed.visualPrompt.trim() : "";
+
+  return {
+    breed: breed || "Unknown",
+    characteristics,
+    visualPrompt: visualPrompt || "Match the pet in the reference image exactly.",
+  };
+}
+
 // We instantiate ai inside functions to ensure they pick up dynamic env updates
 
 function parseDataUrl(dataUrl: string): { mimeType: string; base64Data: string } {
@@ -191,10 +246,7 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
     })
   );
 
-  const cand = (json.candidates || [])[0];
-  const parts = cand?.content?.parts || [];
-  const text = parts.find((p: any) => typeof p?.text === "string")?.text;
-  return String(text || "");
+  return extractTextFromGeminiJson(json);
 }
 
 export async function analyzePetImages(imageDatas: string[]) {
@@ -229,11 +281,9 @@ export async function analyzePetImages(imageDatas: string[]) {
       })
     );
 
-    const cand = (json.candidates || [])[0];
-    const parts = cand?.content?.parts || [];
-    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+    const text = extractTextFromGeminiJson(json);
     if (!text) throw new Error("Failed to parse Gemini response");
-    return JSON.parse(String(text));
+    return JSON.parse(text);
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
     throw error;
@@ -378,10 +428,7 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       })
     );
-    const cand = (json.candidates || [])[0];
-    const parts = cand?.content?.parts || [];
-    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
-    return String(text || "");
+    return extractTextFromGeminiJson(json);
   } catch (error) {
     console.error("Prompt Generation Error:", error);
     return sceneDescription ? `在该场景中，宠物自然互动：${sceneDescription}` : "宠物在场景中自然互动，镜头稳定，动作自然。";
@@ -444,7 +491,7 @@ function getDashscopeBaseUrl() {
 
 const tempPublicImageCache = new Map<string, string>();
 
-async function uploadDataUrlToTempPublicUrl(dataUrl: string, filenameBase: string): Promise<string> {
+export async function uploadDataUrlToTempPublicUrl(dataUrl: string, filenameBase: string): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
   const cached = tempPublicImageCache.get(dataUrl);
   if (cached) return cached;
@@ -466,6 +513,12 @@ async function uploadDataUrlToTempPublicUrl(dataUrl: string, filenameBase: strin
 
   tempPublicImageCache.set(dataUrl, url);
   return url;
+}
+
+export async function ensureTempPublicImageUrl(url: string, filenameBase: string): Promise<string> {
+  if (!url) return url;
+  if (!url.startsWith("data:")) return url;
+  return uploadDataUrlToTempPublicUrl(url, filenameBase);
 }
 
 export async function generatePetVideo(
@@ -676,10 +729,7 @@ export async function chatWithPet(petDescription: string, userMessage: string) {
     const json = await geminiGenerateContent("gemini-2.5-flash", {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
-    const cand = (json.candidates || [])[0];
-    const parts = cand?.content?.parts || [];
-    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
-    return String(text || "");
+    return extractTextFromGeminiJson(json);
   } catch (error) {
     console.error("Chat Error:", error);
     return "Woof! (I'm a bit shy right now)";

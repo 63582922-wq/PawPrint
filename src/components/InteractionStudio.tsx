@@ -344,6 +344,10 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                         rows={3}
                         className="mt-2 w-full resize-none rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
                       />
+                      <p className="mt-2 text-[10px] leading-relaxed opacity-60">
+                        {t.videoUsesReferences ||
+                          "视频生成会自动使用：角色卡 + 原始照片 + 场景图作为参考图（无需导出/粘贴 ID）。"}
+                      </p>
                       {showDevTools && (
                       <div className="mt-4 space-y-2">
                         <p className="text-[10px] leading-relaxed opacity-60">
