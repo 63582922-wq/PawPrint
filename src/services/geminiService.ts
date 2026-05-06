@@ -627,6 +627,19 @@ export async function generatePetVideo(
 
       if (includeAudio) parameters.audio = true;
 
+      if (model.startsWith("vidu/")) {
+        return {
+          model,
+          prompt: systemPrompt,
+          images: viduImages,
+          input: {
+            prompt: systemPrompt,
+            images: viduImages,
+          },
+          parameters,
+        };
+      }
+
       return {
         model,
         input: {
