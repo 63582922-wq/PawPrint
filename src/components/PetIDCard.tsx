@@ -12,6 +12,7 @@ interface PetIDCardProps {
 }
 
 export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
+  const showDevTools = !!import.meta.env.DEV;
   const [chatMessage, setChatMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [lastPetReply, setLastPetReply] = useState<string | null>(null);
@@ -68,8 +69,8 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
       setLastPetReply(reply);
     } catch (error: any) {
       console.error(error);
-      if (error.message?.includes("API key is missing")) {
-        setLastPetReply("⚠️ Please configure VITE_GEMINI_API_KEY in your .env file to chat with me!");
+      if (String(error?.message || "").includes("missing_gemini_api_key")) {
+        setLastPetReply("⚠️ 服务端未配置 GEMINI_API_KEY，暂时无法对话。");
       } else {
         setLastPetReply("⚠️ Sorry, I'm having trouble understanding right now.");
       }
@@ -247,18 +248,24 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
           label={t.shareProfile}
           variant="secondary"
         />
-        <ActionButton 
-          onClick={handleDownloadCharacterSheet} 
-          icon={<Download size={18} />} 
-          label={t.downloadCharacterSheet}
-          variant="secondary"
-        />
-        <ActionButton
-          onClick={handleDownloadOriginalPhoto}
-          icon={<Download size={18} />}
-          label={t.downloadOriginalPhoto}
-          variant="secondary"
-        />
+        {showDevTools ? (
+          <>
+            <ActionButton 
+              onClick={handleDownloadCharacterSheet} 
+              icon={<Download size={18} />} 
+              label={t.downloadCharacterSheet}
+              variant="secondary"
+            />
+            <ActionButton
+              onClick={handleDownloadOriginalPhoto}
+              icon={<Download size={18} />}
+              label={t.downloadOriginalPhoto}
+              variant="secondary"
+            />
+          </>
+        ) : (
+          <div />
+        )}
         <button
           onClick={onReset}
           className="flex items-center justify-center gap-2 py-4 text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-orange-500"

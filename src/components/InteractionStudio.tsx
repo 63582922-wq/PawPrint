@@ -21,6 +21,7 @@ interface InteractionStudioProps {
 }
 
 export default function InteractionStudio({ pet, onSave, t }: InteractionStudioProps) {
+  const showDevTools = !!import.meta.env.DEV;
   const [sceneImage, setSceneImage] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -71,22 +72,24 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   const handleGenerate = async () => {
     if (!sceneImage) return;
 
-    try {
-      const envKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
-      const storedKey = (() => {
-        try {
-          return localStorage.getItem("pawprint_dashscope_api_key");
-        } catch (e) {
-          return null;
-        }
-      })();
+    if (showDevTools) {
+      try {
+        const envKey = import.meta.env.VITE_DASHSCOPE_API_KEY;
+        const storedKey = (() => {
+          try {
+            return localStorage.getItem("pawprint_dashscope_api_key");
+          } catch (e) {
+            return null;
+          }
+        })();
 
-      if (!envKey && !storedKey) {
-        setNeedsKey(true);
-        return;
+        if (!envKey && !storedKey) {
+          setNeedsKey(true);
+          return;
+        }
+      } catch (e) {
+        console.warn("API key check failed, proceeding anyway", e);
       }
-    } catch (e) {
-      console.warn("API key check failed, proceeding anyway", e);
     }
 
     setIsGenerating(true);
@@ -99,10 +102,13 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         : `${pet.name} naturally interacts with the scene.`;
 
       if (autoPrompt) {
-        const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!geminiKey) {
-          setAutoPrompt(false);
-        } else {
+        if (showDevTools) {
+          const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (!geminiKey) {
+            setAutoPrompt(false);
+          }
+        }
+        if (!showDevTools || import.meta.env.VITE_GEMINI_API_KEY) {
           let sceneDesc = "";
           try {
             sceneDesc = await describeSceneImage(sceneImage);
@@ -128,9 +134,13 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
       setInteractionStep('rendering');
       
       // 2. Real Video Generation with Veo (Ingredients mode)
-      const cardForVideo = characterCardPublicUrl.trim() || (pet.characterSheetUrl || "");
-      const sceneForVideo = scenePublicUrl.trim() || (sceneImage || "");
-      const refForVideo = referencePhotoPublicUrl.trim() || (pet.referencePhotoUrl || pet.avatarUrl || "");
+      const cardForVideo = showDevTools
+        ? (characterCardPublicUrl.trim() || (pet.characterSheetUrl || ""))
+        : (pet.characterSheetUrl || "");
+      const sceneForVideo = showDevTools ? (scenePublicUrl.trim() || (sceneImage || "")) : (sceneImage || "");
+      const refForVideo = showDevTools
+        ? (referencePhotoPublicUrl.trim() || (pet.referencePhotoUrl || pet.avatarUrl || ""))
+        : (pet.referencePhotoUrl || pet.avatarUrl || "");
 
       const videoBlobUrl = await generatePetVideo(
         cardForVideo,
@@ -144,7 +154,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
       setIsMuted(true);
     } catch (error: any) {
       console.error(error);
-      if (error?.message?.includes("VITE_DASHSCOPE_API_KEY")) {
+      if (showDevTools && error?.message?.includes("VITE_DASHSCOPE_API_KEY")) {
         setNeedsKey(true);
       } else {
         setErrorMessage(error?.message || "Failed to generate video.");
@@ -246,7 +256,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
             >
               <img src={sceneImage} alt="Scene" className="h-full w-full object-cover opacity-60 blur-sm grayscale" />
               <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-white">
-                {needsKey ? (
+                {showDevTools && needsKey ? (
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg">
                       <Key size={32} />
@@ -334,6 +344,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                         rows={3}
                         className="mt-2 w-full resize-none rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
                       />
+                      {showDevTools && (
                       <div className="mt-4 space-y-2">
                         <p className="text-[10px] leading-relaxed opacity-60">
                           {t.publicUrlHint || "提示：Vidu 参考生视频通常要求参考图是公网 http(s) URL。若你遇到参考不生效/报错，可把角色卡、原图、场景图上传到图床/OSS，并在下方粘贴 URL。"}
@@ -366,6 +377,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                           className="mt-1 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
                         />
                       </div>
+                      )}
                     </div>
                     {errorMessage && (
                       <p className="mt-4 max-w-[280px] rounded-2xl bg-red-500/20 px-4 py-3 text-xs leading-relaxed text-red-100">
@@ -440,20 +452,32 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                     <Save size={18} />
                     {t.saveMemory}
                   </button>
-                  <button
-                    onClick={downloadVideo}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
-                  >
-                    <Play size={18} fill="currentColor" />
-                    {t.downloadVideo}
-                  </button>
+                  {showDevTools ? (
+                    <button
+                      onClick={downloadVideo}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
+                    >
+                      <Play size={18} fill="currentColor" />
+                      {t.downloadVideo}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => window.open(generatedResult, "_blank", "noopener,noreferrer")}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
+                    >
+                      <Play size={18} fill="currentColor" />
+                      {t.watchVideo || "Watch"}
+                    </button>
+                  )}
                 </div>
-                <button
-                  onClick={copyVideoLink}
-                  className="w-full rounded-2xl bg-white/10 py-3 text-xs font-black uppercase tracking-widest text-white/80 backdrop-blur-md transition-transform active:scale-95"
-                >
-                  {t.copyVideoLink}
-                </button>
+                {showDevTools && (
+                  <button
+                    onClick={copyVideoLink}
+                    className="w-full rounded-2xl bg-white/10 py-3 text-xs font-black uppercase tracking-widest text-white/80 backdrop-blur-md transition-transform active:scale-95"
+                  >
+                    {t.copyVideoLink}
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
