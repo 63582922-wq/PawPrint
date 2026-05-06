@@ -158,10 +158,21 @@ app.use("/api/dashscope", async (req, res) => {
 });
 
 const distDir = path.join(__dirname, "dist");
-app.use(express.static(distDir, { maxAge: "1h" }));
-app.get("*", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
+app.use(
+  express.static(distDir, {
+    maxAge: "1h",
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".html")) {
+        res.setHeader("cache-control", "no-store");
+      }
+    },
+  })
+);
+app.get("*", (_req, res) => {
+  res.setHeader("cache-control", "no-store");
+  res.sendFile(path.join(distDir, "index.html"));
+});
 
 app.listen(PORT, () => {
   console.log(`Server listening on ${PORT}`);
 });
-
