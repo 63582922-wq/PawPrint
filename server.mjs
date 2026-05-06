@@ -32,6 +32,18 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/version", (_req, res) => {
+  res.json({
+    commit:
+      process.env.RENDER_GIT_COMMIT ||
+      process.env.GIT_COMMIT ||
+      process.env.COMMIT_SHA ||
+      "",
+    service: process.env.RENDER_SERVICE_ID || "",
+    instance: process.env.RENDER_INSTANCE_ID || "",
+  });
+});
+
 app.use(express.json({ limit: "15mb" }));
 
 const uploadsDir = path.join(__dirname, "uploads");

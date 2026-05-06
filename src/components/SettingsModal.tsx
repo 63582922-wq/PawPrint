@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Trash2, Globe, Info, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -13,6 +13,23 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ t, onClose, onReset, lang, toggleLang }: SettingsModalProps) {
+  const [commit, setCommit] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/version")
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        const c = String(j?.commit || "");
+        if (c) setCommit(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleClearData = () => {
     if (window.confirm(t.clearDataConfirm)) {
       onReset();
@@ -44,7 +61,7 @@ export default function SettingsModal({ t, onClose, onReset, lang, toggleLang }:
              <h4 className="font-bold text-lg">{t.appName}</h4>
              <p className="text-sm text-gray-500 mt-1">{t.appDescription}</p>
              <div className="mt-4 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-gray-400 ring-1 ring-gray-100 uppercase">
-                {t.version}: 1.2.0-STABLE
+                {t.version}: {commit ? commit.slice(0, 7) : "1.2.0-STABLE"}
              </div>
           </div>
         </section>
