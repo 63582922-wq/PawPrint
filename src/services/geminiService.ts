@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 
 (() => {
   try {
@@ -30,22 +30,24 @@ import { GoogleGenAI, Type } from "@google/genai";
   } catch (e) {}
 })();
 
-// process.env check is only for non-browser environments or when running tests
-// In Vite, we should rely solely on import.meta.env
-const getApiKey = () => {
+function getGeminiBaseUrl() {
   try {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-      return import.meta.env.VITE_GEMINI_API_KEY;
-    }
-  } catch (e) {
-    // Ignore error
-  }
-  // Fallback for non-Vite environments if needed, but safe to execute
-  if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
-    return process.env.GEMINI_API_KEY;
-  }
-  return "";
-};
+    if ((import.meta as any).env?.DEV) return "/api/gemini";
+  } catch (e) {}
+  return "/api/gemini";
+}
+
+async function geminiGenerateContent(model: string, body: any) {
+  const baseUrl = getGeminiBaseUrl();
+  const res = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `Gemini request failed (${res.status})`);
+  return JSON.parse(text || "{}");
+}
 
 // We instantiate ai inside functions to ensure they pick up dynamic env updates
 
@@ -165,13 +167,6 @@ async function withNetworkRetries<T>(
 }
 
 export async function describeSceneImage(sceneImageDataUrl: string) {
-  const currentApiKey = getApiKey();
-  if (!currentApiKey) {
-    throw new Error("API key is missing. Please provide a valid API key in .env (VITE_GEMINI_API_KEY).");
-  }
-
-  const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
-
   const normalized = await downscaleImageDataUrlIfNeeded(sceneImageDataUrl, {
     maxDimension: 1280,
     jpegQuality: 0.85,
@@ -182,34 +177,27 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
   const prompt =
     "Describe the scene in the image in 2-4 short sentences. Include: location type, major objects, lighting, and camera perspective. Do not add any style words (no anime/cartoon/illustration).";
 
-  const response = await withNetworkRetries(() =>
-    aiInstance.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: {
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              data: img.base64Data,
-              mimeType: img.mimeType,
-            },
-          },
-        ],
-      },
+  const json = await withNetworkRetries(() =>
+    geminiGenerateContent("gemini-2.5-flash", {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inline_data: { data: img.base64Data, mime_type: img.mimeType } },
+          ],
+        },
+      ],
     })
   );
 
-  return response.text || "";
+  const cand = (json.candidates || [])[0];
+  const parts = cand?.content?.parts || [];
+  const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+  return String(text || "");
 }
 
 export async function analyzePetImages(imageDatas: string[]) {
-  const currentApiKey = getApiKey();
-  if (!currentApiKey) {
-    throw new Error("API key is missing. Please provide a valid API key in .env (VITE_GEMINI_API_KEY).");
-  }
-
-  const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
-
   const prompt = `
     Analyze these images of a pet. 
     1. Identify the breed and primary colors.
@@ -226,31 +214,26 @@ export async function analyzePetImages(imageDatas: string[]) {
   const imageParts = normalizedImages.map((data) => {
     const parsed = parseDataUrl(data);
     return {
-      inlineData: {
+      inline_data: {
         data: parsed.base64Data,
-        mimeType: parsed.mimeType,
-      },
+        mime_type: parsed.mimeType,
+      }
     };
   });
 
   try {
-    const response = await withNetworkRetries(() =>
-      aiInstance.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: {
-          parts: [{ text: prompt }, ...imageParts],
-        },
-        config: {
-          responseMimeType: "application/json",
-        },
+    const json = await withNetworkRetries(() =>
+      geminiGenerateContent("gemini-2.5-flash", {
+        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+        generationConfig: { responseMimeType: "application/json" },
       })
     );
 
-    const text = response.text;
-    if (text) {
-      return JSON.parse(text);
-    }
-    throw new Error("Failed to parse Gemini response");
+    const cand = (json.candidates || [])[0];
+    const parts = cand?.content?.parts || [];
+    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+    if (!text) throw new Error("Failed to parse Gemini response");
+    return JSON.parse(String(text));
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
     throw error;
@@ -258,13 +241,6 @@ export async function analyzePetImages(imageDatas: string[]) {
 }
 
 export async function generateCharacterSheet(visualPrompt: string, referenceImageDataUrl?: string) {
-  const currentApiKey = getApiKey();
-  if (!currentApiKey) {
-    throw new Error("API key is missing. Please provide a valid API key in .env (VITE_GEMINI_API_KEY).");
-  }
-
-  const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
-
   const imageModel = (() => {
     try {
       const v = String((import.meta as any)?.env?.VITE_GEMINI_IMAGE_MODEL || "").trim();
@@ -299,10 +275,10 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
       });
       const ref = parseDataUrl(normalizedRef);
       parts.push({
-        inlineData: {
+        inline_data: {
           data: ref.base64Data,
-          mimeType: ref.mimeType,
-        },
+          mime_type: ref.mimeType,
+        }
       });
     }
 
@@ -315,15 +291,14 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
 
     const runModel = async (model: string, requestedImageSize: string) => {
       return await withNetworkRetries(() =>
-        aiInstance.models.generateContent({
-          model,
+        geminiGenerateContent(model, {
           contents,
-          config: {
-            responseModalities: ["IMAGE"] as any,
+          generationConfig: {
+            responseModalities: ["IMAGE"],
             imageConfig: {
               aspectRatio: "1:1",
               imageSize: requestedImageSize,
-            } as any,
+            },
           },
         })
       );
@@ -349,11 +324,15 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
 
     let base64Image = "";
     let mimeType = "image/jpeg";
-    for (const candidate of response.candidates || []) {
-      for (const part of candidate.content?.parts || []) {
-        if (part.inlineData) {
-          base64Image = part.inlineData.data;
-          mimeType = part.inlineData.mimeType || mimeType;
+    const candidates = response.candidates || response?.candidates || [];
+    for (const candidate of candidates) {
+      const parts = candidate?.content?.parts || candidate?.content?.parts || [];
+      for (const part of parts) {
+        const blob = part?.inlineData || part?.inline_data;
+        const data = blob?.data;
+        if (data) {
+          base64Image = data;
+          mimeType = blob?.mimeType || blob?.mime_type || mimeType;
           break;
         }
       }
@@ -382,13 +361,6 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
 }
 
 export async function generateInteractivePrompt(petDescription: string, sceneDescription: string) {
-  const currentApiKey = getApiKey();
-  if (!currentApiKey) {
-    throw new Error("API key is missing. Please provide a valid API key in .env (VITE_GEMINI_API_KEY).");
-  }
-
-  const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
-
   const prompt =
     `你是一个分镜与动作导演。根据“宠物信息”和“场景描述”，为图生视频生成一段动作+镜头提示词。\n` +
     `要求：\n` +
@@ -401,13 +373,15 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
     `场景描述：${sceneDescription}\n`;
 
   try {
-    const response = await withNetworkRetries(() =>
-      aiInstance.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
+    const json = await withNetworkRetries(() =>
+      geminiGenerateContent("gemini-2.5-flash", {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
       })
     );
-    return response.text;
+    const cand = (json.candidates || [])[0];
+    const parts = cand?.content?.parts || [];
+    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+    return String(text || "");
   } catch (error) {
     console.error("Prompt Generation Error:", error);
     return sceneDescription ? `在该场景中，宠物自然互动：${sceneDescription}` : "宠物在场景中自然互动，镜头稳定，动作自然。";
@@ -465,7 +439,7 @@ function getDashscopeBaseUrl() {
   try {
     if ((import.meta as any).env?.DEV) return "/api/dashscope";
   } catch (e) {}
-  return "https://dashscope.aliyuncs.com";
+  return "/api/dashscope";
 }
 
 const tempPublicImageCache = new Map<string, string>();
@@ -479,15 +453,7 @@ async function uploadDataUrlToTempPublicUrl(dataUrl: string, filenameBase: strin
     throw new Error("当前环境不支持临时图片上传。请在浏览器中运行，或手动提供公网 URL。");
   }
 
-  let isDev = false;
-  try {
-    isDev = !!(import.meta as any)?.env?.DEV;
-  } catch (e) {}
-  if (!isDev) {
-    throw new Error("临时图床上传仅在本地开发环境启用。请手动提供公网 URL。");
-  }
-
-  const res = await fetch("/api/temp-upload", {
+  const res = await fetch("/api/upload-dataurl", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ dataUrl, filenameBase }),
@@ -509,8 +475,11 @@ export async function generatePetVideo(
   referencePhotoPath?: string
 ) {
   const dashscopeApiKey = getDashscopeApiKey();
-  
-  if (!dashscopeApiKey) {
+  let isProd = false;
+  try {
+    isProd = !!(import.meta as any)?.env?.PROD;
+  } catch (e) {}
+  if (!dashscopeApiKey && !isProd) {
     throw new Error("API key is missing. Please provide a valid Aliyun DashScope API key in .env (VITE_DASHSCOPE_API_KEY).");
   }
 
@@ -567,6 +536,18 @@ export async function generatePetVideo(
       return false;
     })();
 
+    if (model.startsWith("vidu/") && (requireHttpForVidu || isProd)) {
+      if (cardForVidu.startsWith("data:")) {
+        cardForVidu = await uploadDataUrlToTempPublicUrl(cardForVidu, "pawprint-card");
+      }
+      if (refForVidu && refForVidu.startsWith("data:")) {
+        refForVidu = await uploadDataUrlToTempPublicUrl(refForVidu, "pawprint-ref");
+      }
+      if (sceneForVidu.startsWith("data:")) {
+        sceneForVidu = await uploadDataUrlToTempPublicUrl(sceneForVidu, "pawprint-scene");
+      }
+    }
+
     const viduMedia: any[] = [];
     viduMedia.push({ type: "image", url: cardForVidu });
     if (refForVidu) viduMedia.push({ type: "image", url: refForVidu });
@@ -610,8 +591,8 @@ export async function generatePetVideo(
         method: "POST",
         headers: {
           "X-DashScope-Async": "enable",
-          "Authorization": `Bearer ${dashscopeApiKey}`,
           "Content-Type": "application/json",
+          ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
         },
         body: JSON.stringify(buildPayload(includeAudio)),
       });
@@ -631,7 +612,7 @@ export async function generatePetVideo(
         const statusRes = await fetch(`${baseUrl}/api/v1/tasks/${taskId}`, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${dashscopeApiKey}`
+          ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
         }
         });
 
@@ -683,13 +664,6 @@ export async function generatePetVideo(
 }
 
 export async function chatWithPet(petDescription: string, userMessage: string) {
-  const currentApiKey = getApiKey();
-  if (!currentApiKey) {
-    throw new Error("API key is missing. Please provide a valid API key in .env (VITE_GEMINI_API_KEY).");
-  }
-
-  const aiInstance = new GoogleGenAI({ apiKey: currentApiKey });
-
   const prompt = `
     You are the following pet: ${petDescription}. 
     The user is talking to you. Reply in a short, expressive, and cute way that matches your personality and breed. 
@@ -699,11 +673,13 @@ export async function chatWithPet(petDescription: string, userMessage: string) {
   `;
 
   try {
-    const response = await aiInstance.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
+    const json = await geminiGenerateContent("gemini-2.5-flash", {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
-    return response.text;
+    const cand = (json.candidates || [])[0];
+    const parts = cand?.content?.parts || [];
+    const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+    return String(text || "");
   } catch (error) {
     console.error("Chat Error:", error);
     return "Woof! (I'm a bit shy right now)";
