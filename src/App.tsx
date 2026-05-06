@@ -37,23 +37,69 @@ export default function App() {
 
   const t = translations[lang];
 
+  const safeSetLocalStorage = (key: string, value: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(key, value);
+      return;
+    } catch (e: any) {
+      const msg = String(e?.message || e || "");
+      const looksLikeQuota =
+        /quota/i.test(msg) ||
+        /exceeded/i.test(msg) ||
+        e?.name === "QuotaExceededError" ||
+        e?.code === 22;
+      if (!looksLikeQuota) return;
+
+      try {
+        localStorage.removeItem("pawprint_interactions");
+      } catch (e2) {}
+
+      try {
+        localStorage.setItem(key, value);
+      } catch (e3) {
+        try {
+          alert("本地存储空间已满，已尝试清理旧回忆。若仍失败，请到「设置」里点「清除数据」。");
+        } catch (e4) {}
+      }
+    }
+  };
+
   useEffect(() => {
     // Load from local storage if exists
-    const savedPet = localStorage.getItem('pawprint_pet');
-    const savedInteractions = localStorage.getItem('pawprint_interactions');
-    const savedLang = localStorage.getItem('pawprint_lang') as Language;
+    let savedPet: string | null = null;
+    let savedInteractions: string | null = null;
+    let savedLang: Language | null = null;
+    try {
+      savedPet = localStorage.getItem('pawprint_pet');
+      savedInteractions = localStorage.getItem('pawprint_interactions');
+      savedLang = localStorage.getItem('pawprint_lang') as Language;
+    } catch (e) {}
     
     if (savedLang) setLang(savedLang);
 
     if (savedPet) {
-      setPetID(JSON.parse(savedPet));
-      setActiveTab('id');
+      try {
+        setPetID(JSON.parse(savedPet));
+        setActiveTab('id');
+      } catch (e) {
+        try {
+          localStorage.removeItem("pawprint_pet");
+        } catch (e2) {}
+        setActiveTab('scan');
+      }
     } else {
       setActiveTab('scan');
     }
     
     if (savedInteractions) {
-      setInteractions(JSON.parse(savedInteractions));
+      try {
+        setInteractions(JSON.parse(savedInteractions));
+      } catch (e) {
+        try {
+          localStorage.removeItem("pawprint_interactions");
+        } catch (e2) {}
+      }
     }
 
     const onboarded = localStorage.getItem('pawprint_onboarded');
@@ -67,26 +113,26 @@ export default function App() {
   const toggleLang = () => {
     const newLang = lang === 'en' ? 'zh' : 'en';
     setLang(newLang);
-    localStorage.setItem('pawprint_lang', newLang);
+    safeSetLocalStorage('pawprint_lang', newLang);
   };
 
   const handlePetCreated = (newPet: PetID) => {
     setPetID(newPet);
-    localStorage.setItem('pawprint_pet', JSON.stringify(newPet));
+    safeSetLocalStorage('pawprint_pet', JSON.stringify(newPet));
     setActiveTab('id');
   };
 
   const handleInteractionSaved = (newInteraction: InteractionVideo) => {
     const updated = [newInteraction, ...interactions];
     setInteractions(updated);
-    localStorage.setItem('pawprint_interactions', JSON.stringify(updated));
+    safeSetLocalStorage('pawprint_interactions', JSON.stringify(updated));
     setActiveTab('memories');
   };
 
   const handleDeleteInteraction = (id: string) => {
     const updated = interactions.filter(i => i.id !== id);
     setInteractions(updated);
-    localStorage.setItem('pawprint_interactions', JSON.stringify(updated));
+    safeSetLocalStorage('pawprint_interactions', JSON.stringify(updated));
   };
 
   const handleResetData = () => {
@@ -322,4 +368,3 @@ function NavButton({
     </button>
   );
 }
-

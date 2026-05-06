@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Camera, Sparkles, Wand2, Loader2, Play, Save, RefreshCcw, Image as ImageIcon, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetID, InteractionVideo } from '../types';
-import { describeSceneImage, generateInteractivePrompt, generatePetVideo, sanitizeVideoPromptText, setDashscopeApiKey } from '../services/geminiService';
+import { describeSceneImage, ensureTempPublicImageUrl, generateInteractivePrompt, generatePetVideo, sanitizeVideoPromptText, setDashscopeApiKey } from '../services/geminiService';
 import { cn } from '../lib/utils';
 
 declare global {
@@ -22,6 +22,7 @@ interface InteractionStudioProps {
 
 export default function InteractionStudio({ pet, onSave, t }: InteractionStudioProps) {
   const showDevTools = !!import.meta.env.DEV;
+  const isProd = !!import.meta.env.PROD;
   const [sceneImage, setSceneImage] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -178,13 +179,14 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
     }
   };
 
-  const saveToMemories = () => {
+  const saveToMemories = async () => {
     if (!generatedResult || !sceneImage) return;
     
+    const sceneUrl = isProd ? await ensureTempPublicImageUrl(sceneImage, "pawprint-scene") : sceneImage;
     const newInteraction: InteractionVideo = {
       id: Math.random().toString(36).substr(2, 9),
       petId: pet.id,
-      sceneImageUrl: sceneImage,
+      sceneImageUrl: sceneUrl,
       videoUrl: generatedResult,
       createdAt: Date.now(),
     };
