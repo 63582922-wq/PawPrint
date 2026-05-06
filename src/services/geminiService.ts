@@ -601,10 +601,10 @@ export async function generatePetVideo(
       }
     }
 
-    const viduMedia: any[] = [];
-    viduMedia.push({ type: "image", url: cardForVidu });
-    if (refForVidu) viduMedia.push({ type: "image", url: refForVidu });
-    viduMedia.push({ type: "image", url: sceneForVidu });
+    const viduImages: string[] = [];
+    viduImages.push(cardForVidu);
+    if (refForVidu) viduImages.push(refForVidu);
+    viduImages.push(sceneForVidu);
 
     if (model.startsWith("vidu/") && requireHttpForVidu) {
       const all = [cardForVidu, refForVidu, sceneForVidu].filter(Boolean) as string[];
@@ -631,7 +631,7 @@ export async function generatePetVideo(
         model,
         input: {
           prompt: systemPrompt,
-          media: viduMedia,
+          images: viduImages,
         },
         parameters,
       };
