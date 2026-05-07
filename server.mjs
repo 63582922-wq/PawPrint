@@ -135,6 +135,34 @@ function writeBase64ImageToUploads(base64Data, mimeType, filenameBase) {
   return `${APP_URL}/uploads/${filename}`;
 }
 
+function tryReadUploadsImageAsBase64(urlString) {
+  try {
+    if (!urlString) return null;
+    const u = new URL(String(urlString));
+    const app = new URL(APP_URL);
+    if (u.hostname !== app.hostname) return null;
+    if (!u.pathname.startsWith("/uploads/")) return null;
+    const filename = path.basename(u.pathname);
+    const filePath = path.join(uploadsDir, filename);
+    if (!fs.existsSync(filePath)) return null;
+    const buf = fs.readFileSync(filePath);
+    const MAX_BYTES = 3 * 1024 * 1024;
+    if (buf.length > MAX_BYTES) return null;
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const mimeType =
+      ext === "png"
+        ? "image/png"
+        : ext === "webp"
+          ? "image/webp"
+          : ext === "gif"
+            ? "image/gif"
+            : "image/jpeg";
+    return { base64: buf.toString("base64"), mimeType };
+  } catch (e) {
+    return null;
+  }
+}
+
 app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
   try {
     if (!APIYI_API_KEY) {
@@ -159,23 +187,28 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
       const parsed = parseDataUrl(referenceImageDataUrl);
       parts.push({ inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } });
     } else if (referenceImageUrl && /^https?:\/\//i.test(referenceImageUrl)) {
-      const imgRes = await undiciFetch(referenceImageUrl, {
-        method: "GET",
-        ...(dispatcher ? { dispatcher } : {}),
-      });
-      if (!imgRes.ok) {
-        res.status(502).json({ error: "reference_image_fetch_failed", status: imgRes.status });
-        return;
+      const local = tryReadUploadsImageAsBase64(referenceImageUrl);
+      if (local) {
+        parts.push({ inline_data: { data: local.base64, mime_type: local.mimeType } });
+      } else {
+        const imgRes = await undiciFetch(referenceImageUrl, {
+          method: "GET",
+          ...(dispatcher ? { dispatcher } : {}),
+        });
+        if (!imgRes.ok) {
+          res.status(502).json({ error: "reference_image_fetch_failed", status: imgRes.status });
+          return;
+        }
+        const ab = await imgRes.arrayBuffer();
+        const buf = Buffer.from(ab);
+        const MAX_BYTES = 3 * 1024 * 1024;
+        if (buf.length > MAX_BYTES) {
+          res.status(413).json({ error: "reference_image_too_large" });
+          return;
+        }
+        const mt = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
+        parts.push({ inline_data: { data: buf.toString("base64"), mime_type: mt } });
       }
-      const ab = await imgRes.arrayBuffer();
-      const buf = Buffer.from(ab);
-      const MAX_BYTES = 3 * 1024 * 1024;
-      if (buf.length > MAX_BYTES) {
-        res.status(413).json({ error: "reference_image_too_large" });
-        return;
-      }
-      const mt = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
-      parts.push({ inline_data: { data: buf.toString("base64"), mime_type: mt } });
     }
 
     const upstreamUrl = `https://api.apiyi.com/v1beta/models/${encodeURIComponent(imageModel)}:generateContent`;
