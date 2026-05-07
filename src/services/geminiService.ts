@@ -675,15 +675,15 @@ export async function generatePetVideo(
     let refForVidu = normalizedRefPhoto;
     let sceneForVidu = normalizedScene;
 
-    const model = (() => {
+    let model = (() => {
       try {
         const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL || "").trim();
         if (v) return v;
       } catch (e) {}
-      return "wan2.6-I2V-flash";
+      return "wan2.6-i2v-flash";
     })();
 
-    const isWanI2v = /^wan/i.test(model);
+    const isWanI2v = (m: string) => /^wan/i.test(m);
 
     const requireHttpForVidu = (() => {
       try {
@@ -693,7 +693,7 @@ export async function generatePetVideo(
     })();
 
     const shouldUploadToPublic =
-      isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v" || isWanI2v;
+      isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v" || isWanI2v(model);
 
     if (shouldUploadToPublic) {
       if (cardForVidu.startsWith("data:")) {
@@ -707,18 +707,20 @@ export async function generatePetVideo(
       }
     }
 
-    const mediaType = model === "happyhorse-1.0-r2v" ? "reference_image" : "image";
-    const media: Array<{ type: string; url: string }> = [];
-    if (!isWanI2v) {
-      if (model === "happyhorse-1.0-r2v") {
+    const buildMedia = (m: string) => {
+      const mediaType = m === "happyhorse-1.0-r2v" ? "reference_image" : "image";
+      const media: Array<{ type: string; url: string }> = [];
+      if (isWanI2v(m)) return media;
+      if (m === "happyhorse-1.0-r2v") {
         const primaryRef = refForVidu || cardForVidu;
         media.push({ type: mediaType, url: primaryRef });
-      } else {
-        media.push({ type: mediaType, url: cardForVidu });
-        if (refForVidu) media.push({ type: mediaType, url: refForVidu });
-        media.push({ type: mediaType, url: sceneForVidu });
+        return media;
       }
-    }
+      media.push({ type: mediaType, url: cardForVidu });
+      if (refForVidu) media.push({ type: mediaType, url: refForVidu });
+      media.push({ type: mediaType, url: sceneForVidu });
+      return media;
+    };
 
     if (model.startsWith("vidu/") && requireHttpForVidu) {
       const all = [cardForVidu, refForVidu, sceneForVidu].filter(Boolean) as string[];
@@ -741,7 +743,7 @@ export async function generatePetVideo(
 
       if (includeAudio) parameters.audio = true;
 
-      if (isWanI2v) {
+      if (isWanI2v(model)) {
         const imgUrl = sceneForVidu;
         return {
           model,
@@ -757,7 +759,7 @@ export async function generatePetVideo(
         model,
         input: {
           prompt: systemPrompt,
-          media,
+          media: buildMedia(model),
         },
         parameters,
       };
@@ -825,7 +827,25 @@ export async function generatePetVideo(
       createData = await doCreate(true);
     } catch (e: any) {
       const msg = String(e?.message || "");
-      if (msg.includes("audio") || msg.includes("InvalidParameter")) {
+      if (msg.includes("Model not exist")) {
+        const alt =
+          model === "wan2.6-I2V-flash"
+            ? "wan2.6-i2v-flash"
+            : model === "wan2.6-i2v-flash"
+              ? "wan2.6-I2V-flash"
+              : "happyhorse-1.0-r2v";
+        model = alt;
+        try {
+          createData = await doCreate(true);
+        } catch (e2: any) {
+          const msg2 = String(e2?.message || "");
+          if (msg2.includes("audio") || msg2.includes("InvalidParameter")) {
+            createData = await doCreate(false);
+          } else {
+            throw e2;
+          }
+        }
+      } else if (msg.includes("audio") || msg.includes("InvalidParameter")) {
         createData = await doCreate(false);
       } else {
         throw e;
