@@ -305,6 +305,40 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     return "image/png";
   };
 
+  if (referenceImageDataUrl) {
+    const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
+      maxDimension: 1024,
+      jpegQuality: 0.85,
+      maxBytes: 1_200_000,
+    });
+    const ref = parseDataUrl(normalizedRef);
+    const bytes = (() => {
+      if (typeof atob === "function") {
+        const bin = atob(ref.base64Data);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr;
+      }
+      const B = (globalThis as any).Buffer;
+      if (B) return new Uint8Array(B.from(ref.base64Data, "base64"));
+      throw new Error("Base64 decode not supported in this environment.");
+    })();
+
+    const form = new FormData();
+    form.append("model", imageModel);
+    form.append("prompt", promptText);
+    form.append("size", imageSize);
+    form.append("quality", quality);
+    form.append("n", "1");
+    form.append("output_format", outputFormat);
+    form.append("image[]", new Blob([bytes], { type: ref.mimeType }), "reference.jpg");
+
+    const json = await openaiImagesEdits(form);
+    const b64 = String(json?.data?.[0]?.b64_json || "");
+    if (!b64) throw new Error("No image data returned from gpt-image-2 edits.");
+    return `data:${getOutputMime(outputFormat)};base64,${b64}`;
+  }
+
   const json = await openaiImagesGenerations({
     model: imageModel,
     prompt: promptText,

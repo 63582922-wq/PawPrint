@@ -75,7 +75,7 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
       }
       
       // Generate Character Sheet Image
-      const characterSheetUrl = await generateCharacterSheet(analysis.visualPrompt);
+      const characterSheetUrl = await generateCharacterSheet(analysis.visualPrompt, images[0]);
       
       setStatus(t.generatingCard || "Finalizing ID Card...");
 

@@ -174,6 +174,9 @@ app.use("/api/openai", async (req, res) => {
         body = chunks.length ? Buffer.concat(chunks) : undefined;
       }
     }
+    if (body && Buffer.isBuffer(body) && !headers["content-length"]) {
+      headers["content-length"] = String(body.length);
+    }
 
     const upstreamRes = await undiciFetch(upstreamUrl, {
       method: req.method,
