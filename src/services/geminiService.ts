@@ -81,12 +81,25 @@ No markdown, no extra keys.`;
     return { inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } };
   });
 
-  const json = await withNetworkRetries(() =>
-    geminiGenerateContent("gemini-2.5-flash", {
-      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-      generationConfig: { responseMimeType: "application/json" },
-    })
-  );
+  let json: any;
+  try {
+    json = await withNetworkRetries(() =>
+      geminiGenerateContent("gemini-2.5-flash", {
+        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+        generationConfig: { responseMimeType: "application/json" },
+      })
+    );
+  } catch (e: any) {
+    const msg = String(e?.message || e || "");
+    if (msg.includes("User location is not supported")) {
+      return {
+        breed: "Unknown",
+        characteristics: [],
+        visualPrompt: "Match the pet in the reference image exactly.",
+      };
+    }
+    throw e;
+  }
 
   const text = extractTextFromGeminiJson(json);
   const parsed = JSON.parse(text || "{}");
