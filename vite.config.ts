@@ -193,6 +193,13 @@ export default defineConfig(({mode}) => {
                 if (k.toLowerCase() === 'accept-encoding') continue;
                 headers[k] = Array.isArray(v) ? v.join(',') : String(v);
               }
+              const geminiApiKey =
+                env.GEMINI_API_KEY ||
+                env.VITE_GEMINI_API_KEY ||
+                process.env.GEMINI_API_KEY ||
+                process.env.VITE_GEMINI_API_KEY ||
+                "";
+              if (geminiApiKey) headers["x-goog-api-key"] = geminiApiKey;
 
               const tryDispatchers = [primaryDispatcher, secondaryDispatcher].filter(Boolean) as any[];
               let upstreamRes: any;
