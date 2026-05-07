@@ -181,6 +181,9 @@ function extractHttpStatusFromError(e: any): number | null {
 
 function isRetryableGeminiError(e: any): boolean {
   const message = String(e?.message || "");
+  if (/无可用渠道/i.test(message)) return false;
+  if (/计费模式\s*\\[按次计费\\]/i.test(message)) return false;
+  if (/shell_api_error/i.test(message)) return false;
   const status = extractHttpStatusFromError(e);
   if (status && [429, 500, 502, 503, 504].includes(status)) return true;
   if (/UNAVAILABLE/i.test(message)) return true;
