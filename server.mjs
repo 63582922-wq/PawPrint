@@ -93,6 +93,110 @@ app.post("/api/upload-dataurl", async (req, res) => {
   }
 });
 
+function parseDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== "string") throw new Error("invalid_data_url");
+  if (!dataUrl.startsWith("data:")) throw new Error("invalid_data_url");
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex < 0) throw new Error("invalid_data_url");
+  const header = dataUrl.slice(0, commaIndex);
+  const base64Data = dataUrl.slice(commaIndex + 1);
+  const mimeMatch = header.match(/^data:([^;]+);base64$/i);
+  const mimeType = (mimeMatch?.[1] || "application/octet-stream").toLowerCase();
+  return { mimeType, base64Data };
+}
+
+function extractImageFromGeminiJson(json) {
+  const candidates = json?.candidates || [];
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts || [];
+    for (const part of parts) {
+      const inline = part?.inlineData || part?.inline_data;
+      const data = inline?.data;
+      if (data) {
+        return {
+          base64Data: String(data),
+          mimeType: String(inline?.mimeType || inline?.mime_type || "image/png").toLowerCase(),
+        };
+      }
+    }
+  }
+  return { base64Data: "", mimeType: "image/png" };
+}
+
+function writeBase64ImageToUploads(base64Data, mimeType, filenameBase) {
+  const safeBase = String(filenameBase || "pawprint").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 32) || "pawprint";
+  const id = crypto.randomBytes(12).toString("hex");
+  const mt = String(mimeType || "image/png").toLowerCase();
+  const ext = mt.includes("png") ? "png" : mt.includes("webp") ? "webp" : mt.includes("gif") ? "gif" : "jpg";
+  const buf = Buffer.from(String(base64Data || ""), "base64");
+  const filename = `${safeBase}-${id}.${ext}`;
+  const filePath = path.join(uploadsDir, filename);
+  fs.writeFileSync(filePath, buf);
+  return `${APP_URL}/uploads/${filename}`;
+}
+
+app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
+  try {
+    if (!APIYI_API_KEY) {
+      res.status(500).json({ error: "missing_apiyi_api_key" });
+      return;
+    }
+
+    const promptText = String(req.body?.promptText || "").trim();
+    const referenceImageDataUrl = req.body?.referenceImageDataUrl ? String(req.body.referenceImageDataUrl) : "";
+    const imageModel = String(req.body?.imageModel || "gemini-3.1-flash-image-preview").trim();
+    const imageSizeRaw = String(req.body?.imageSize || "2K").trim();
+    const imageSize = imageSizeRaw === "1K" || imageSizeRaw === "2K" ? imageSizeRaw : "2K";
+
+    if (!promptText) {
+      res.status(400).json({ error: "missing_prompt" });
+      return;
+    }
+
+    const parts = [{ text: promptText }];
+    if (referenceImageDataUrl) {
+      const parsed = parseDataUrl(referenceImageDataUrl);
+      parts.push({ inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } });
+    }
+
+    const upstreamUrl = `https://api.apiyi.com/v1beta/models/${encodeURIComponent(imageModel)}:generateContent`;
+    const upstreamRes = await undiciFetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${APIYI_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          imageConfig: { aspectRatio: "1:1", imageSize },
+        },
+      }),
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+
+    const text = await upstreamRes.text();
+    if (!upstreamRes.ok) {
+      res.status(upstreamRes.status).setHeader("content-type", "application/json; charset=utf-8");
+      res.end(text || JSON.stringify({ error: "upstream_failed" }));
+      return;
+    }
+
+    const json = JSON.parse(text || "{}");
+    const img = extractImageFromGeminiJson(json);
+    if (!img.base64Data) {
+      res.status(502).json({ error: "no_image_data" });
+      return;
+    }
+
+    const url = writeBase64ImageToUploads(img.base64Data, img.mimeType, "pawprint-card");
+    res.json({ url });
+  } catch (e) {
+    res.status(502).json({ error: "nano_banana_failed", message: String(e?.message || e) });
+  }
+});
+
 app.use("/api/dashscope", async (req, res) => {
   try {
     if (!DASHSCOPE_API_KEY) {
@@ -106,6 +210,7 @@ app.use("/api/dashscope", async (req, res) => {
       if (!v) continue;
       if (k.toLowerCase() === "host") continue;
       if (k.toLowerCase() === "content-length") continue;
+      if (k.toLowerCase() === "accept-encoding") continue;
       if (k.toLowerCase() === "origin") continue;
       headers[k] = Array.isArray(v) ? v.join(",") : String(v);
     }
@@ -123,7 +228,6 @@ app.use("/api/dashscope", async (req, res) => {
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
-      if (key.toLowerCase() === "content-encoding") return;
       if (key.toLowerCase() === "content-length") return;
       res.setHeader(key, value);
     });
@@ -147,6 +251,7 @@ app.use("/api/openai", async (req, res) => {
       if (!v) continue;
       if (k.toLowerCase() === "host") continue;
       if (k.toLowerCase() === "content-length") continue;
+      if (k.toLowerCase() === "accept-encoding") continue;
       if (k.toLowerCase() === "origin") continue;
       headers[k] = Array.isArray(v) ? v.join(",") : String(v);
     }
@@ -189,7 +294,6 @@ app.use("/api/openai", async (req, res) => {
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
-      if (key.toLowerCase() === "content-encoding") return;
       if (key.toLowerCase() === "content-length") return;
       res.setHeader(key, value);
     });

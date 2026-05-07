@@ -270,32 +270,32 @@ CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
 Subject details for reinforcement: ${visualPrompt}. 
 Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 9 panels showing different angles.`;
 
-  const parts: any[] = [{ text: promptText }];
-  if (referenceImageDataUrl) {
-    const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
-      maxDimension: 1024,
-      jpegQuality: 0.85,
-      maxBytes: 1_200_000,
-    });
-    const ref = parseDataUrl(normalizedRef);
-    parts.push({ inline_data: { data: ref.base64Data, mime_type: ref.mimeType } });
-  }
+  const normalizedRef = referenceImageDataUrl
+    ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
+        maxDimension: 1024,
+        jpegQuality: 0.85,
+        maxBytes: 1_200_000,
+      })
+    : undefined;
 
-  const json = await withNetworkRetries(() =>
-    apiyiGeminiGenerateContent(imageModel, {
-      contents: [{ role: "user", parts }],
-      generationConfig: {
-        responseModalities: ["IMAGE"],
-        imageConfig: {
-          aspectRatio: "1:1",
-          imageSize,
-        },
-      },
+  const res = await withNetworkRetries(() =>
+    fetch("/api/nano-banana/generate-character-sheet", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        promptText,
+        referenceImageDataUrl: normalizedRef,
+        imageModel,
+        imageSize,
+      }),
     })
   );
-  const img = extractImageFromGeminiJson(json);
-  if (!img.base64Data) throw new Error("No image data returned from Nano Banana image model.");
-  return `data:${img.mimeType};base64,${img.base64Data}`;
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `Nano Banana proxy failed (${res.status})`);
+  const parsed = JSON.parse(text || "{}");
+  const url = String(parsed?.url || "");
+  if (!url) throw new Error("No image URL returned from Nano Banana proxy.");
+  return url;
 }
 
 export async function generateInteractivePrompt(petDescription: string, sceneDescription: string) {
