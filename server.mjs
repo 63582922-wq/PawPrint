@@ -157,6 +157,7 @@ app.use("/api/openai", async (req, res) => {
       body: ["GET", "HEAD"].includes(String(req.method || "").toUpperCase())
         ? undefined
         : req,
+      duplex: "half",
       ...(dispatcher ? { dispatcher } : {}),
     });
 
