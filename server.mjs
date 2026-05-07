@@ -144,6 +144,7 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
 
     const promptText = String(req.body?.promptText || "").trim();
     const referenceImageDataUrl = req.body?.referenceImageDataUrl ? String(req.body.referenceImageDataUrl) : "";
+    const referenceImageUrl = req.body?.referenceImageUrl ? String(req.body.referenceImageUrl) : "";
     const imageModel = String(req.body?.imageModel || "gemini-3.1-flash-image-preview").trim();
     const imageSizeRaw = String(req.body?.imageSize || "2K").trim();
     const imageSize = imageSizeRaw === "1K" || imageSizeRaw === "2K" ? imageSizeRaw : "2K";
@@ -157,6 +158,24 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
     if (referenceImageDataUrl) {
       const parsed = parseDataUrl(referenceImageDataUrl);
       parts.push({ inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } });
+    } else if (referenceImageUrl && /^https?:\/\//i.test(referenceImageUrl)) {
+      const imgRes = await undiciFetch(referenceImageUrl, {
+        method: "GET",
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+      if (!imgRes.ok) {
+        res.status(502).json({ error: "reference_image_fetch_failed", status: imgRes.status });
+        return;
+      }
+      const ab = await imgRes.arrayBuffer();
+      const buf = Buffer.from(ab);
+      const MAX_BYTES = 3 * 1024 * 1024;
+      if (buf.length > MAX_BYTES) {
+        res.status(413).json({ error: "reference_image_too_large" });
+        return;
+      }
+      const mt = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
+      parts.push({ inline_data: { data: buf.toString("base64"), mime_type: mt } });
     }
 
     const upstreamUrl = `https://api.apiyi.com/v1beta/models/${encodeURIComponent(imageModel)}:generateContent`;

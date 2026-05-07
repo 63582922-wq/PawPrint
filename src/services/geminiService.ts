@@ -248,6 +248,11 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
 }
 
 export async function generateCharacterSheet(visualPrompt: string, referenceImageDataUrl?: string) {
+  let isProd = false;
+  try {
+    isProd = !!(import.meta as any)?.env?.PROD;
+  } catch (e) {}
+
   const imageModel = (() => {
     try {
       const v = String((import.meta as any)?.env?.VITE_GEMINI_IMAGE_MODEL || "").trim();
@@ -273,12 +278,48 @@ CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
 Subject details for reinforcement: ${visualPrompt}. 
 Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 9 panels showing different angles.`;
 
-  const normalizedRef = referenceImageDataUrl
+  const normalizedRefForModel = referenceImageDataUrl
     ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
         maxDimension: 1024,
         jpegQuality: 0.85,
         maxBytes: 1_200_000,
       })
+    : undefined;
+
+  if (!isProd) {
+    const parts: any[] = [{ text: promptText }];
+    if (normalizedRefForModel) {
+      const ref = parseDataUrl(normalizedRefForModel);
+      parts.push({ inline_data: { data: ref.base64Data, mime_type: ref.mimeType } });
+    }
+
+    const json = await withNetworkRetries(() =>
+      apiyiGeminiGenerateContent(imageModel, {
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          imageConfig: {
+            aspectRatio: "1:1",
+            imageSize,
+          },
+        },
+      })
+    );
+    const img = extractImageFromGeminiJson(json);
+    if (!img.base64Data) throw new Error("No image data returned from Nano Banana image model.");
+    return `data:${img.mimeType};base64,${img.base64Data}`;
+  }
+
+  const normalizedRefForUpload = referenceImageDataUrl
+    ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
+        maxDimension: 768,
+        jpegQuality: 0.82,
+        maxBytes: 450_000,
+      })
+    : undefined;
+
+  const referenceImageUrl = normalizedRefForUpload
+    ? await ensureTempPublicImageUrl(normalizedRefForUpload, "pawprint-ref")
     : undefined;
 
   const res = await withNetworkRetries(() =>
@@ -287,7 +328,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         promptText,
-        referenceImageDataUrl: normalizedRef,
+        referenceImageUrl,
         imageModel,
         imageSize,
       }),
