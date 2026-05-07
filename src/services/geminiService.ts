@@ -30,6 +30,8 @@ import { Type } from "@google/genai";
   } catch (e) {}
 })();
 
+let geminiRegionBlocked = false;
+
 function getGeminiBaseUrl() {
   try {
     if ((import.meta as any).env?.DEV) return "/api/gemini";
@@ -38,6 +40,17 @@ function getGeminiBaseUrl() {
 }
 
 async function geminiGenerateContent(model: string, body: any) {
+  if (geminiRegionBlocked) {
+    throw new Error(
+      JSON.stringify({
+        error: {
+          code: 400,
+          message: "User location is not supported for the API use.",
+          status: "FAILED_PRECONDITION",
+        },
+      })
+    );
+  }
   const baseUrl = getGeminiBaseUrl();
   const res = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
@@ -45,6 +58,9 @@ async function geminiGenerateContent(model: string, body: any) {
     body: JSON.stringify(body),
   });
   const text = await res.text();
+  if (!res.ok && text.includes("User location is not supported for the API use")) {
+    geminiRegionBlocked = true;
+  }
   if (!res.ok) throw new Error(text || `Gemini request failed (${res.status})`);
   return JSON.parse(text || "{}");
 }
@@ -245,21 +261,26 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
   const prompt =
     "Describe the scene in the image in 2-4 short sentences. Include: location type, major objects, lighting, and camera perspective. Do not add any style words (no anime/cartoon/illustration).";
 
-  const json = await withNetworkRetries(() =>
-    geminiGenerateContent("gemini-2.5-flash", {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inline_data: { data: img.base64Data, mime_type: img.mimeType } },
-          ],
-        },
-      ],
-    })
-  );
-
-  return extractTextFromGeminiJson(json);
+  try {
+    const json = await withNetworkRetries(() =>
+      geminiGenerateContent("gemini-2.5-flash", {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inline_data: { data: img.base64Data, mime_type: img.mimeType } },
+            ],
+          },
+        ],
+      })
+    );
+    return extractTextFromGeminiJson(json);
+  } catch (e: any) {
+    const msg = String(e?.message || e || "");
+    if (msg.includes("User location is not supported")) return "";
+    throw e;
+  }
 }
 
 export async function analyzePetImages(imageDatas: string[]) {
@@ -446,7 +467,10 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
     );
     return extractTextFromGeminiJson(json);
   } catch (error) {
-    console.error("Prompt Generation Error:", error);
+    const msg = String((error as any)?.message || "");
+    if (!msg.includes("User location is not supported")) {
+      console.error("Prompt Generation Error:", error);
+    }
     return sceneDescription ? `在该场景中，宠物自然互动：${sceneDescription}` : "宠物在场景中自然互动，镜头稳定，动作自然。";
   }
 }
