@@ -582,7 +582,7 @@ async function generateCharacterSheetViaDashscope(prompt: string) {
       const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_IMAGE_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "wan2.6-t2i";
+    return "wanx-v1";
   })();
 
   const size = (() => {
