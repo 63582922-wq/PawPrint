@@ -75,7 +75,7 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
       }
       
       // Generate Character Sheet Image
-      const characterSheetUrl = await generateCharacterSheet(analysis.visualPrompt, images[0]);
+      const characterSheetUrl = await generateCharacterSheet(analysis.visualPrompt);
       
       setStatus(t.generatingCard || "Finalizing ID Card...");
 
@@ -103,9 +103,9 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
     } catch (error: any) {
       console.error(error);
       if (error.message?.includes("API key is missing") || error.message?.includes("API_KEY_NOT_FOUND")) {
-        setErrorStatus("API Key is missing. Please configure VITE_GEMINI_API_KEY in your .env file.");
+        setErrorStatus("API Key is missing. Please configure APIYI_API_KEY in your environment variables.");
       } else if (String(error?.message || "").includes('"code":503') || String(error?.message || "").includes("UNAVAILABLE")) {
-        setErrorStatus("Gemini is temporarily overloaded (503). Please retry in a moment.");
+        setErrorStatus("The model gateway is temporarily overloaded (503). Please retry in a moment.");
       } else if (error?.message?.includes("Failed to fetch") || error?.name === "TypeError") {
         setErrorStatus("Network error: Failed to fetch. Please retry, switch network, or try smaller images.");
       } else {

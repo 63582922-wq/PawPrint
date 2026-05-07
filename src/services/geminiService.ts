@@ -267,6 +267,8 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
   const imageSize = (() => {
     try {
       const v = String((import.meta as any)?.env?.VITE_CHARACTER_SHEET_IMAGE_SIZE || "").trim();
+      const m = v.match(/^(\d+)x(\d+)$/i);
+      if (m) return `${m[1]}x${m[2]}`;
       if (v === "2K") return "2048x2048";
       if (v === "1K") return "1024x1024";
     } catch (e) {}
@@ -278,7 +280,7 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
       const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_QUALITY || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "high";
+    return "medium";
   })();
 
   const outputFormat = (() => {
@@ -290,7 +292,7 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
   })();
 
   const promptText = `A single character sheet image containing exactly 9 grid panels arranged in a 3x3 layout. 
-CRITICAL REQUIREMENT: The subject must look EXACTLY like the pet in the provided reference image and description (same breed, same colors, same markings, same physical traits).
+CRITICAL REQUIREMENT: The subject must look EXACTLY like the described pet (same breed, same colors, same markings, same physical traits).
 CRITICAL REQUIREMENT: Do NOT include any text, letters, numbers, or labels anywhere in the image.
 CRITICAL REQUIREMENT: The style MUST be photorealistic and photographic. Do NOT use anime, cartoon, illustration, or stylized drawing styles.
 CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
@@ -303,50 +305,14 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     return "image/png";
   };
 
-  if (referenceImageDataUrl) {
-    const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
-      maxDimension: 1536,
-      jpegQuality: 0.9,
-      maxBytes: 4_000_000,
-    });
-    const ref = parseDataUrl(normalizedRef);
-    const bytes = (() => {
-      if (typeof atob === "function") {
-        const bin = atob(ref.base64Data);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return arr;
-      }
-      const B = (globalThis as any).Buffer;
-      if (B) return new Uint8Array(B.from(ref.base64Data, "base64"));
-      throw new Error("Base64 decode not supported in this environment.");
-    })();
-
-    const form = new FormData();
-    form.append("model", imageModel);
-    form.append("prompt", promptText);
-    form.append("size", imageSize);
-    form.append("quality", quality);
-    form.append("n", "1");
-    form.append("output_format", outputFormat);
-    form.append("image[]", new Blob([bytes], { type: ref.mimeType }), "reference.png");
-
-    const json = await withNetworkRetries(() => openaiImagesEdits(form));
-    const b64 = String(json?.data?.[0]?.b64_json || "");
-    if (!b64) throw new Error("No image data returned from gpt-image-2 edits.");
-    return `data:${getOutputMime(outputFormat)};base64,${b64}`;
-  }
-
-  const json = await withNetworkRetries(() =>
-    openaiImagesGenerations({
-      model: imageModel,
-      prompt: promptText,
-      size: imageSize,
-      quality,
-      n: 1,
-      output_format: outputFormat,
-    })
-  );
+  const json = await openaiImagesGenerations({
+    model: imageModel,
+    prompt: promptText,
+    size: imageSize,
+    quality,
+    n: 1,
+    output_format: outputFormat,
+  });
   const b64 = String(json?.data?.[0]?.b64_json || "");
   if (!b64) throw new Error("No image data returned from gpt-image-2 generations.");
   return `data:${getOutputMime(outputFormat)};base64,${b64}`;
