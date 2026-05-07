@@ -1,46 +1,42 @@
-function getOpenAIBaseUrl() {
+function getApiYiProxyBaseUrl() {
   return "/api/openai";
 }
 
-async function openaiChatCompletions(body: any) {
-  const baseUrl = getOpenAIBaseUrl();
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+async function apiyiGeminiGenerateContent(model: string, body: any) {
+  const baseUrl = getApiYiProxyBaseUrl();
+  const res = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(text || `OpenAI request failed (${res.status})`);
+  if (!res.ok) throw new Error(text || `Gemini request failed (${res.status})`);
   return JSON.parse(text || "{}");
 }
 
-async function openaiImagesGenerations(body: any) {
-  const baseUrl = getOpenAIBaseUrl();
-  const res = await fetch(`${baseUrl}/v1/images/generations`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `OpenAI images request failed (${res.status})`);
-  return JSON.parse(text || "{}");
+function extractTextFromGeminiJson(json: any): string {
+  const cand = (json?.candidates || [])[0];
+  const parts = cand?.content?.parts || [];
+  const text = parts.find((p: any) => typeof p?.text === "string")?.text;
+  return String(text || "");
 }
 
-async function openaiImagesEdits(form: FormData) {
-  const baseUrl = getOpenAIBaseUrl();
-  const res = await fetch(`${baseUrl}/v1/images/edits`, {
-    method: "POST",
-    body: form,
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `OpenAI image edits request failed (${res.status})`);
-  return JSON.parse(text || "{}");
-}
-
-function extractTextFromOpenAIChatJson(json: any): string {
-  const c = (json?.choices || [])[0];
-  const t = c?.message?.content;
-  return typeof t === "string" ? t : "";
+function extractImageFromGeminiJson(json: any): { base64Data: string; mimeType: string } {
+  const candidates = json?.candidates || [];
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts || [];
+    for (const part of parts) {
+      const inline = part?.inlineData || part?.inline_data;
+      const data = inline?.data;
+      if (data) {
+        return {
+          base64Data: String(data),
+          mimeType: String(inline?.mimeType || inline?.mime_type || "image/png"),
+        };
+      }
+    }
+  }
+  return { base64Data: "", mimeType: "image/png" };
 }
 
 export async function analyzePetProfileFromImages(imageDatas: string[]) {
@@ -63,29 +59,27 @@ No markdown, no extra keys.`;
     )
   );
 
-  const model = (() => {
+  const visionModel = (() => {
     try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_VISION_MODEL || "").trim();
+      const v = String((import.meta as any)?.env?.VITE_GEMINI_VISION_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "gpt-4o-mini";
+    return "gemini-2.5-flash";
   })();
 
-  const content: any[] = [{ type: "text", text: prompt }];
-  for (const img of normalizedImages) {
-    content.push({ type: "image_url", image_url: { url: img } });
-  }
+  const imageParts = normalizedImages.map((data) => {
+    const parsed = parseDataUrl(data);
+    return { inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } };
+  });
 
   const json = await withNetworkRetries(() =>
-    openaiChatCompletions({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content }],
+    apiyiGeminiGenerateContent(visionModel, {
+      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+      generationConfig: { responseMimeType: "application/json" },
     })
   );
 
-  const text = extractTextFromOpenAIChatJson(json);
+  const text = extractTextFromGeminiJson(json);
   const parsed = JSON.parse(text || "{}");
 
   const breed = typeof parsed?.breed === "string" ? parsed.breed.trim() : "";
@@ -228,67 +222,44 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
   const prompt =
     "Describe the scene in the image in 2-4 short sentences. Include: location type, major objects, lighting, and camera perspective. Do not add any style words (no anime/cartoon/illustration).";
 
-  const model = (() => {
+  const visionModel = (() => {
     try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_VISION_MODEL || "").trim();
+      const v = String((import.meta as any)?.env?.VITE_GEMINI_VISION_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "gpt-4o-mini";
+    return "gemini-2.5-flash";
   })();
 
+  const img = parseDataUrl(normalized);
   const json = await withNetworkRetries(() =>
-    openaiChatCompletions({
-      model,
-      temperature: 0.2,
-      messages: [
+    apiyiGeminiGenerateContent(visionModel, {
+      contents: [
         {
           role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: normalized } },
-          ],
+          parts: [{ text: prompt }, { inline_data: { data: img.base64Data, mime_type: img.mimeType } }],
         },
       ],
     })
   );
-
-  return extractTextFromOpenAIChatJson(json);
+  return extractTextFromGeminiJson(json);
 }
 
 export async function generateCharacterSheet(visualPrompt: string, referenceImageDataUrl?: string) {
   const imageModel = (() => {
     try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_MODEL || "").trim();
+      const v = String((import.meta as any)?.env?.VITE_GEMINI_IMAGE_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "gpt-image-2";
+    return "gemini-3.1-flash-image-preview";
   })();
 
   const imageSize = (() => {
     try {
       const v = String((import.meta as any)?.env?.VITE_CHARACTER_SHEET_IMAGE_SIZE || "").trim();
-      const m = v.match(/^(\d+)x(\d+)$/i);
-      if (m) return `${m[1]}x${m[2]}`;
-      if (v === "2K") return "2048x2048";
-      if (v === "1K") return "1024x1024";
+      if (v === "2K" || v === "2048x2048") return "2K";
+      if (v === "1K" || v === "1024x1024") return "1K";
     } catch (e) {}
-    return "2048x2048";
-  })();
-
-  const quality = (() => {
-    try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_QUALITY || "").trim();
-      if (v) return v;
-    } catch (e) {}
-    return "medium";
-  })();
-
-  const outputFormat = (() => {
-    try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_FORMAT || "").trim().toLowerCase();
-      if (v === "png" || v === "jpeg" || v === "webp") return v;
-    } catch (e) {}
-    return "png";
+    return "2K";
   })();
 
   const promptText = `A single character sheet image containing exactly 9 grid panels arranged in a 3x3 layout. 
@@ -299,12 +270,7 @@ CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
 Subject details for reinforcement: ${visualPrompt}. 
 Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 9 panels showing different angles.`;
 
-  const getOutputMime = (fmt: string) => {
-    if (fmt === "jpeg") return "image/jpeg";
-    if (fmt === "webp") return "image/webp";
-    return "image/png";
-  };
-
+  const parts: any[] = [{ text: promptText }];
   if (referenceImageDataUrl) {
     const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
       maxDimension: 1024,
@@ -312,48 +278,24 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
       maxBytes: 1_200_000,
     });
     const ref = parseDataUrl(normalizedRef);
-    const bytes = (() => {
-      if (typeof atob === "function") {
-        const bin = atob(ref.base64Data);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return arr;
-      }
-      const B = (globalThis as any).Buffer;
-      if (B) return new Uint8Array(B.from(ref.base64Data, "base64"));
-      throw new Error("Base64 decode not supported in this environment.");
-    })();
-
-    const form = new FormData();
-    form.append("model", imageModel);
-    form.append("prompt", promptText);
-    form.append("size", imageSize);
-    form.append("quality", quality);
-    form.append("n", "1");
-    form.append("output_format", outputFormat);
-    form.append("image[]", new Blob([bytes], { type: ref.mimeType }), "reference.jpg");
-
-    const json = await openaiImagesEdits(form);
-    const directUrl = String((json as any)?.url || "");
-    if (/^https?:\/\//i.test(directUrl)) return directUrl;
-    const b64 = String(json?.data?.[0]?.b64_json || "");
-    if (!b64) throw new Error("No image data returned from gpt-image-2 edits.");
-    return `data:${getOutputMime(outputFormat)};base64,${b64}`;
+    parts.push({ inline_data: { data: ref.base64Data, mime_type: ref.mimeType } });
   }
 
-  const json = await openaiImagesGenerations({
-    model: imageModel,
-    prompt: promptText,
-    size: imageSize,
-    quality,
-    n: 1,
-    output_format: outputFormat,
-  });
-  const directUrl = String((json as any)?.url || "");
-  if (/^https?:\/\//i.test(directUrl)) return directUrl;
-  const b64 = String(json?.data?.[0]?.b64_json || "");
-  if (!b64) throw new Error("No image data returned from gpt-image-2 generations.");
-  return `data:${getOutputMime(outputFormat)};base64,${b64}`;
+  const json = await withNetworkRetries(() =>
+    apiyiGeminiGenerateContent(imageModel, {
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: "1:1",
+          imageSize,
+        },
+      },
+    })
+  );
+  const img = extractImageFromGeminiJson(json);
+  if (!img.base64Data) throw new Error("No image data returned from Nano Banana image model.");
+  return `data:${img.mimeType};base64,${img.base64Data}`;
 }
 
 export async function generateInteractivePrompt(petDescription: string, sceneDescription: string) {
@@ -368,22 +310,20 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
     `宠物信息：${petDescription}\n` +
     `场景描述：${sceneDescription}\n`;
 
-  const model = (() => {
+  const textModel = (() => {
     try {
-      const v = String((import.meta as any)?.env?.VITE_OPENAI_TEXT_MODEL || "").trim();
+      const v = String((import.meta as any)?.env?.VITE_GEMINI_TEXT_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "gpt-4o-mini";
+    return "gemini-2.5-flash";
   })();
 
   const json = await withNetworkRetries(() =>
-    openaiChatCompletions({
-      model,
-      temperature: 0.6,
-      messages: [{ role: "user", content: prompt }],
+    apiyiGeminiGenerateContent(textModel, {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
     })
   );
-  return extractTextFromOpenAIChatJson(json);
+  return extractTextFromGeminiJson(json);
 }
 
 export function sanitizeVideoPromptText(text: string) {
@@ -728,22 +668,20 @@ export async function chatWithPet(petDescription: string, userMessage: string) {
   `;
 
   try {
-    const model = (() => {
+    const textModel = (() => {
       try {
-        const v = String((import.meta as any)?.env?.VITE_OPENAI_TEXT_MODEL || "").trim();
+        const v = String((import.meta as any)?.env?.VITE_GEMINI_TEXT_MODEL || "").trim();
         if (v) return v;
       } catch (e) {}
-      return "gpt-4o-mini";
+      return "gemini-2.5-flash";
     })();
 
     const json = await withNetworkRetries(() =>
-      openaiChatCompletions({
-        model,
-        temperature: 0.8,
-        messages: [{ role: "user", content: prompt }],
+      apiyiGeminiGenerateContent(textModel, {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
       })
     );
-    return extractTextFromOpenAIChatJson(json);
+    return extractTextFromGeminiJson(json);
   } catch (error) {
     console.error("Chat Error:", error);
     return "Woof! (I'm a bit shy right now)";
