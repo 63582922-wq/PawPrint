@@ -360,6 +360,9 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     } catch (e: any) {
       const msg = String(e?.message || e || "");
       const status = typeof e?.status === "number" ? e.status : null;
+      if (msg.includes("User location is not supported")) {
+        return await generateCharacterSheetViaDashscope(promptText);
+      }
       const shouldFallback =
         imageModel !== "gemini-2.5-flash-image" &&
         (status === 502 ||
@@ -519,6 +522,98 @@ export async function ensureTempPublicImageUrl(url: string, filenameBase: string
   if (!url) return url;
   if (!url.startsWith("data:")) return url;
   return uploadDataUrlToTempPublicUrl(url, filenameBase);
+}
+
+async function dashscopeCreateTask(path: string, body: any, dashscopeApiKey: string) {
+  const baseUrl = getDashscopeBaseUrl();
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "X-DashScope-Async": "enable",
+      "Content-Type": "application/json",
+      ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `DashScope request failed (${res.status})`);
+  return JSON.parse(text || "{}");
+}
+
+async function dashscopeGetTask(taskId: string, dashscopeApiKey: string) {
+  const baseUrl = getDashscopeBaseUrl();
+  const res = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
+    method: "GET",
+    headers: {
+      ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
+    },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `DashScope task request failed (${res.status})`);
+  return JSON.parse(text || "{}");
+}
+
+async function pollDashscopeTaskUntilDone(taskId: string, dashscopeApiKey: string) {
+  while (true) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const statusData = await dashscopeGetTask(taskId, dashscopeApiKey);
+    const taskStatus = statusData.output?.task_status;
+    if (taskStatus === "SUCCEEDED") return statusData;
+    if (taskStatus === "FAILED" || taskStatus === "CANCELED" || taskStatus === "UNKNOWN") {
+      const message = String(statusData.output?.message || "");
+      const code = String(statusData.output?.code || "");
+      throw new Error(`DashScope task failed: ${taskStatus}. ${code ? `[${code}] ` : ""}${message}`);
+    }
+  }
+}
+
+async function generateCharacterSheetViaDashscope(prompt: string) {
+  const dashscopeApiKey = getDashscopeApiKey();
+  let isProd = false;
+  try {
+    isProd = !!(import.meta as any)?.env?.PROD;
+  } catch (e) {}
+  if (!dashscopeApiKey && !isProd) {
+    throw new Error("DashScope API key is missing. Please provide VITE_DASHSCOPE_API_KEY in dev.");
+  }
+
+  const model = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_IMAGE_MODEL || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "wan2.6-t2i";
+  })();
+
+  const size = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_IMAGE_SIZE || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "1024*1024";
+  })();
+
+  const createData = await dashscopeCreateTask(
+    "/api/v1/services/aigc/text2image/image-synthesis",
+    {
+      model,
+      input: { prompt },
+      parameters: {
+        size,
+        n: 1,
+        watermark: false,
+      },
+    },
+    dashscopeApiKey
+  );
+
+  const taskId = createData.output?.task_id;
+  if (!taskId) throw new Error("No task_id returned from DashScope image API.");
+
+  const done = await pollDashscopeTaskUntilDone(taskId, dashscopeApiKey);
+  const url = String(done.output?.results?.[0]?.url || "");
+  if (!url) throw new Error("DashScope image task succeeded but no url returned.");
+  return url;
 }
 
 export async function generatePetVideo(
