@@ -29,7 +29,12 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   const [generatedResult, setGeneratedResult] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionText, setActionText] = useState<string>("");
-  const [autoPrompt, setAutoPrompt] = useState(true);
+  const [autoPrompt, setAutoPrompt] = useState(() => {
+    try {
+      return String((import.meta as any)?.env?.VITE_ENABLE_VIDEO_AUTO_PROMPT || "") === "true";
+    } catch (e) {}
+    return false;
+  });
   const [dashscopeKeyDraft, setDashscopeKeyDraft] = useState<string>("");
   const [isMuted, setIsMuted] = useState(true);
   const [interactionStep, setInteractionStep] = useState<'idle' | 'analyzing' | 'rendering' | 'finalizing'>('idle');
@@ -59,7 +64,12 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         setNeedsKey(false);
         setErrorMessage(null);
         setActionText("");
-        setAutoPrompt(true);
+        setAutoPrompt(() => {
+          try {
+            return String((import.meta as any)?.env?.VITE_ENABLE_VIDEO_AUTO_PROMPT || "") === "true";
+          } catch (e) {}
+          return false;
+        });
         setDashscopeKeyDraft("");
         setIsMuted(true);
         setScenePublicUrl("");
@@ -103,32 +113,24 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         : `${pet.name} naturally interacts with the scene.`;
 
       if (autoPrompt) {
-        if (showDevTools) {
-          const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
-          if (!geminiKey) {
-            setAutoPrompt(false);
-          }
+        let sceneDesc = "";
+        try {
+          sceneDesc = await describeSceneImage(sceneImage);
+        } catch (e) {
+          sceneDesc = "";
         }
-        if (!showDevTools || import.meta.env.VITE_GEMINI_API_KEY) {
-          let sceneDesc = "";
-          try {
-            sceneDesc = await describeSceneImage(sceneImage);
-          } catch (e) {
-            sceneDesc = "";
-          }
 
-          const petDesc =
-            `宠物身份必须完全以参考图为准（角色卡与原始照片）。不要改变物种、不要改变毛色/花纹/脸部细节。` +
-            `不要出现人类或文字水印。宠物名称：${pet.name}。`;
-          const sceneWithAction = actionText?.trim()
-            ? `${sceneDesc}\n用户希望的动作：${actionText.trim()}`
-            : sceneDesc || "the provided scene";
+        const petDesc =
+          `宠物身份必须完全以参考图为准（角色卡与原始照片）。不要改变物种、不要改变毛色/花纹/脸部细节。` +
+          `不要出现人类或文字水印。宠物名称：${pet.name}。`;
+        const sceneWithAction = actionText?.trim()
+          ? `${sceneDesc}\n用户希望的动作：${actionText.trim()}`
+          : sceneDesc || "the provided scene";
 
-          try {
-            const generated = await generateInteractivePrompt(petDesc, sceneWithAction);
-            if (generated) prompt = sanitizeVideoPromptText(generated);
-          } catch (e) {}
-        }
+        try {
+          const generated = await generateInteractivePrompt(petDesc, sceneWithAction);
+          if (generated) prompt = sanitizeVideoPromptText(generated);
+        } catch (e) {}
       }
       
       console.log("Generating with prompt:", prompt);

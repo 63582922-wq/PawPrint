@@ -69,8 +69,9 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
       setLastPetReply(reply);
     } catch (error: any) {
       console.error(error);
-      if (String(error?.message || "").includes("missing_gemini_api_key")) {
-        setLastPetReply("⚠️ 服务端未配置 GEMINI_API_KEY，暂时无法对话。");
+      const msg = String(error?.message || "");
+      if (msg.includes("missing_apiyi_api_key")) {
+        setLastPetReply("⚠️ 服务端未配置 APIYI_API_KEY，暂时无法对话。");
       } else {
         setLastPetReply("⚠️ Sorry, I'm having trouble understanding right now.");
       }
