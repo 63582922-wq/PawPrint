@@ -163,6 +163,139 @@ function tryReadUploadsImageAsBase64(urlString) {
   }
 }
 
+const nanoBananaJobs = new Map();
+let nanoBananaRunning = 0;
+const NANO_BANANA_MAX_RUNNING = 2;
+const NANO_BANANA_JOB_TTL_MS = 30 * 60 * 1000;
+
+function nanoBananaCleanupJobs(now = Date.now()) {
+  for (const [id, job] of nanoBananaJobs.entries()) {
+    if (!job?.createdAt) {
+      nanoBananaJobs.delete(id);
+      continue;
+    }
+    if (now - job.createdAt > NANO_BANANA_JOB_TTL_MS) nanoBananaJobs.delete(id);
+  }
+}
+
+async function nanoBananaGenerateCharacterSheetUrl({
+  promptText,
+  referenceImageDataUrl,
+  referenceImageUrl,
+  imageModel,
+  imageSize,
+}) {
+  const parts = [{ text: promptText }];
+  if (referenceImageDataUrl) {
+    const parsed = parseDataUrl(referenceImageDataUrl);
+    parts.push({ inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } });
+  } else if (referenceImageUrl && /^https?:\/\//i.test(referenceImageUrl)) {
+    const local = tryReadUploadsImageAsBase64(referenceImageUrl);
+    if (local) {
+      parts.push({ inline_data: { data: local.base64, mime_type: local.mimeType } });
+    } else {
+      const imgRes = await undiciFetch(referenceImageUrl, {
+        method: "GET",
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+      if (!imgRes.ok) {
+        const err = new Error(`reference_image_fetch_failed (${imgRes.status})`);
+        err.status = 502;
+        throw err;
+      }
+      const ab = await imgRes.arrayBuffer();
+      const buf = Buffer.from(ab);
+      const MAX_BYTES = 3 * 1024 * 1024;
+      if (buf.length > MAX_BYTES) {
+        const err = new Error("reference_image_too_large");
+        err.status = 413;
+        throw err;
+      }
+      const mt = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
+      parts.push({ inline_data: { data: buf.toString("base64"), mime_type: mt } });
+    }
+  }
+
+  const upstreamUrl = `https://api.apiyi.com/v1beta/models/${encodeURIComponent(imageModel)}:generateContent`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 240_000);
+  let upstreamRes;
+  try {
+    upstreamRes = await undiciFetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${APIYI_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          imageConfig: { aspectRatio: "1:1", imageSize },
+        },
+      }),
+      signal: controller.signal,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const text = await upstreamRes.text();
+  if (!upstreamRes.ok) {
+    const err = new Error(text || "upstream_failed");
+    err.status = upstreamRes.status;
+    throw err;
+  }
+
+  const json = JSON.parse(text || "{}");
+  const img = extractImageFromGeminiJson(json);
+  if (!img.base64Data) {
+    const err = new Error("no_image_data");
+    err.status = 502;
+    throw err;
+  }
+
+  return writeBase64ImageToUploads(img.base64Data, img.mimeType, "pawprint-card");
+}
+
+async function nanoBananaRunJob(jobId, payload) {
+  nanoBananaRunning += 1;
+  try {
+    const url = await nanoBananaGenerateCharacterSheetUrl(payload);
+    const job = nanoBananaJobs.get(jobId);
+    if (job) {
+      job.status = "done";
+      job.url = url;
+    }
+  } catch (e) {
+    const job = nanoBananaJobs.get(jobId);
+    if (job) {
+      job.status = "error";
+      job.error = String(e?.message || e);
+      job.httpStatus = typeof e?.status === "number" ? e.status : undefined;
+    }
+  } finally {
+    nanoBananaRunning = Math.max(0, nanoBananaRunning - 1);
+    nanoBananaCleanupJobs();
+  }
+}
+
+app.get("/api/nano-banana/generate-character-sheet", (_req, res) => {
+  res.status(405).json({ error: "method_not_allowed", message: "Use POST." });
+});
+
+app.get("/api/nano-banana/jobs/:id", (req, res) => {
+  nanoBananaCleanupJobs();
+  const job = nanoBananaJobs.get(String(req.params.id || ""));
+  if (!job) {
+    res.status(404).json({ error: "job_not_found" });
+    return;
+  }
+  res.setHeader("cache-control", "no-store");
+  res.json({ status: job.status, url: job.url, error: job.error, httpStatus: job.httpStatus });
+});
+
 app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
   try {
     if (!APIYI_API_KEY) {
@@ -182,70 +315,28 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
       return;
     }
 
-    const parts = [{ text: promptText }];
-    if (referenceImageDataUrl) {
-      const parsed = parseDataUrl(referenceImageDataUrl);
-      parts.push({ inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } });
-    } else if (referenceImageUrl && /^https?:\/\//i.test(referenceImageUrl)) {
-      const local = tryReadUploadsImageAsBase64(referenceImageUrl);
-      if (local) {
-        parts.push({ inline_data: { data: local.base64, mime_type: local.mimeType } });
-      } else {
-        const imgRes = await undiciFetch(referenceImageUrl, {
-          method: "GET",
-          ...(dispatcher ? { dispatcher } : {}),
-        });
-        if (!imgRes.ok) {
-          res.status(502).json({ error: "reference_image_fetch_failed", status: imgRes.status });
-          return;
-        }
-        const ab = await imgRes.arrayBuffer();
-        const buf = Buffer.from(ab);
-        const MAX_BYTES = 3 * 1024 * 1024;
-        if (buf.length > MAX_BYTES) {
-          res.status(413).json({ error: "reference_image_too_large" });
-          return;
-        }
-        const mt = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
-        parts.push({ inline_data: { data: buf.toString("base64"), mime_type: mt } });
+    nanoBananaCleanupJobs();
+    const asyncMode = String(req.query?.async || "") === "1";
+    const payload = { promptText, referenceImageDataUrl, referenceImageUrl, imageModel, imageSize };
+
+    if (asyncMode) {
+      if (nanoBananaRunning >= NANO_BANANA_MAX_RUNNING) {
+        res.status(429).json({ error: "too_many_requests" });
+        return;
       }
-    }
-
-    const upstreamUrl = `https://api.apiyi.com/v1beta/models/${encodeURIComponent(imageModel)}:generateContent`;
-    const upstreamRes = await undiciFetch(upstreamUrl, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${APIYI_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          responseModalities: ["IMAGE"],
-          imageConfig: { aspectRatio: "1:1", imageSize },
-        },
-      }),
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-
-    const text = await upstreamRes.text();
-    if (!upstreamRes.ok) {
-      res.status(upstreamRes.status).setHeader("content-type", "application/json; charset=utf-8");
-      res.end(text || JSON.stringify({ error: "upstream_failed" }));
+      const jobId = crypto.randomBytes(12).toString("hex");
+      nanoBananaJobs.set(jobId, { status: "running", createdAt: Date.now() });
+      setTimeout(() => nanoBananaRunJob(jobId, payload), 0);
+      res.status(202).setHeader("cache-control", "no-store");
+      res.json({ jobId, status: "running" });
       return;
     }
 
-    const json = JSON.parse(text || "{}");
-    const img = extractImageFromGeminiJson(json);
-    if (!img.base64Data) {
-      res.status(502).json({ error: "no_image_data" });
-      return;
-    }
-
-    const url = writeBase64ImageToUploads(img.base64Data, img.mimeType, "pawprint-card");
+    const url = await nanoBananaGenerateCharacterSheetUrl(payload);
     res.json({ url });
   } catch (e) {
-    res.status(502).json({ error: "nano_banana_failed", message: String(e?.message || e) });
+    const status = typeof e?.status === "number" ? e.status : 502;
+    res.status(status).json({ error: "nano_banana_failed", message: String(e?.message || e) });
   }
 });
 

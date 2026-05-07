@@ -322,8 +322,8 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     ? await ensureTempPublicImageUrl(normalizedRefForUpload, "pawprint-ref")
     : undefined;
 
-  const res = await withNetworkRetries(() =>
-    fetch("/api/nano-banana/generate-character-sheet", {
+  const startRes = await withNetworkRetries(() =>
+    fetch("/api/nano-banana/generate-character-sheet?async=1", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -334,12 +334,32 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
       }),
     })
   );
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `Nano Banana proxy failed (${res.status})`);
-  const parsed = JSON.parse(text || "{}");
-  const url = String(parsed?.url || "");
-  if (!url) throw new Error("No image URL returned from Nano Banana proxy.");
-  return url;
+  const startText = await startRes.text();
+  if (!startRes.ok) throw new Error(startText || `Nano Banana proxy failed (${startRes.status})`);
+  const startParsed = JSON.parse(startText || "{}");
+  const jobId = String(startParsed?.jobId || "");
+  if (!jobId) throw new Error("No jobId returned from Nano Banana proxy.");
+
+  const deadline = Date.now() + 4 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const statusRes = await fetch(`/api/nano-banana/jobs/${encodeURIComponent(jobId)}`, { method: "GET" });
+    const statusText = await statusRes.text();
+    if (!statusRes.ok) continue;
+    const statusJson = JSON.parse(statusText || "{}");
+    const status = String(statusJson?.status || "");
+    if (status === "done") {
+      const url = String(statusJson?.url || "");
+      if (!url) throw new Error("No image URL returned from Nano Banana job.");
+      return url;
+    }
+    if (status === "error") {
+      const msg = String(statusJson?.error || "");
+      throw new Error(msg || "Nano Banana job failed.");
+    }
+  }
+
+  throw new Error("Nano Banana generation is taking too long. Please retry.");
 }
 
 export async function generateInteractivePrompt(petDescription: string, sceneDescription: string) {
