@@ -595,7 +595,9 @@ export async function generatePetVideo(
       return false;
     })();
 
-    if (model.startsWith("vidu/") && (requireHttpForVidu || isProd)) {
+    const shouldUploadToPublic = isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v";
+
+    if (shouldUploadToPublic) {
       if (cardForVidu.startsWith("data:")) {
         cardForVidu = await uploadDataUrlToTempPublicUrl(cardForVidu, "pawprint-card");
       }
