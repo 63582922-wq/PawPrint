@@ -334,6 +334,8 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     form.append("image[]", new Blob([bytes], { type: ref.mimeType }), "reference.jpg");
 
     const json = await openaiImagesEdits(form);
+    const directUrl = String((json as any)?.url || "");
+    if (/^https?:\/\//i.test(directUrl)) return directUrl;
     const b64 = String(json?.data?.[0]?.b64_json || "");
     if (!b64) throw new Error("No image data returned from gpt-image-2 edits.");
     return `data:${getOutputMime(outputFormat)};base64,${b64}`;
@@ -347,6 +349,8 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     n: 1,
     output_format: outputFormat,
   });
+  const directUrl = String((json as any)?.url || "");
+  if (/^https?:\/\//i.test(directUrl)) return directUrl;
   const b64 = String(json?.data?.[0]?.b64_json || "");
   if (!b64) throw new Error("No image data returned from gpt-image-2 generations.");
   return `data:${getOutputMime(outputFormat)};base64,${b64}`;

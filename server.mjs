@@ -185,6 +185,40 @@ app.use("/api/openai", async (req, res) => {
       ...(dispatcher ? { dispatcher } : {}),
     });
 
+    const ab = await upstreamRes.arrayBuffer();
+    const buf = Buffer.from(ab);
+
+    const path = req.originalUrl.replace(/^\/api\/openai/, "");
+    const isImagesEndpoint = /^\/v1\/images\/(edits|generations)\b/i.test(path);
+    const upstreamContentType = String(upstreamRes.headers.get("content-type") || "");
+
+    if (upstreamRes.ok && isImagesEndpoint && upstreamContentType.toLowerCase().includes("application/json")) {
+      try {
+        const json = JSON.parse(buf.toString("utf8") || "{}");
+        const b64 = String(json?.data?.[0]?.b64_json || "");
+        if (b64) {
+          const imgBuf = Buffer.from(b64, "base64");
+          const ext = (() => {
+            if (imgBuf.length >= 12 && imgBuf[0] === 0x52 && imgBuf[1] === 0x49 && imgBuf[2] === 0x46 && imgBuf[3] === 0x46) {
+              const ascii = imgBuf.slice(8, 12).toString("ascii");
+              if (ascii === "WEBP") return "webp";
+            }
+            if (imgBuf.length >= 8 && imgBuf[0] === 0x89 && imgBuf[1] === 0x50 && imgBuf[2] === 0x4e && imgBuf[3] === 0x47) return "png";
+            if (imgBuf.length >= 2 && imgBuf[0] === 0xff && imgBuf[1] === 0xd8) return "jpg";
+            return "png";
+          })();
+          const safeBase = "openai-image";
+          const id = crypto.randomBytes(12).toString("hex");
+          const filename = `${safeBase}-${id}.${ext}`;
+          const filePath = path.join(uploadsDir, filename);
+          fs.writeFileSync(filePath, imgBuf);
+          const url = `${APP_URL}/uploads/${filename}`;
+          res.status(200).json({ url });
+          return;
+        }
+      } catch (e) {}
+    }
+
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
@@ -192,8 +226,7 @@ app.use("/api/openai", async (req, res) => {
       if (key.toLowerCase() === "content-length") return;
       res.setHeader(key, value);
     });
-    const ab = await upstreamRes.arrayBuffer();
-    res.end(Buffer.from(ab));
+    res.end(buf);
   } catch (e) {
     res.status(502).json({ error: "openai_proxy_failed", message: String(e?.message || e) });
   }
