@@ -14,8 +14,12 @@ app.disable("x-powered-by");
 const PORT = Number(process.env.PORT || 3000);
 const APP_URL = String(process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "";
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || process.env.VITE_DASHSCOPE_API_KEY || "";
+const APIYI_API_KEY =
+  process.env.APIYI_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  process.env.OPENAI_APIYI_API_KEY ||
+  "";
 
 const HTTP_PROXY =
   process.env.HTTP_PROXY ||
@@ -88,46 +92,6 @@ app.post("/api/upload-dataurl", async (req, res) => {
   }
 });
 
-app.use("/api/gemini", async (req, res) => {
-  try {
-    if (!GEMINI_API_KEY) {
-      res.status(500).json({ error: "missing_gemini_api_key" });
-      return;
-    }
-
-    const upstreamUrl = `https://generativelanguage.googleapis.com${req.originalUrl.replace(/^\/api\/gemini/, "")}`;
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (!v) continue;
-      if (k.toLowerCase() === "host") continue;
-      if (k.toLowerCase() === "content-length") continue;
-      headers[k] = Array.isArray(v) ? v.join(",") : String(v);
-    }
-    headers["x-goog-api-key"] = GEMINI_API_KEY;
-
-    const upstreamRes = await undiciFetch(upstreamUrl, {
-      method: req.method,
-      headers,
-      body: ["GET", "HEAD"].includes(String(req.method || "").toUpperCase())
-        ? undefined
-        : JSON.stringify(req.body ?? {}),
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-
-    res.status(upstreamRes.status);
-    upstreamRes.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "transfer-encoding") return;
-      if (key.toLowerCase() === "content-encoding") return;
-      if (key.toLowerCase() === "content-length") return;
-      res.setHeader(key, value);
-    });
-    const ab = await upstreamRes.arrayBuffer();
-    res.end(Buffer.from(ab));
-  } catch (e) {
-    res.status(502).json({ error: "gemini_proxy_failed", message: String(e?.message || e) });
-  }
-});
-
 app.use("/api/dashscope", async (req, res) => {
   try {
     if (!DASHSCOPE_API_KEY) {
@@ -166,6 +130,47 @@ app.use("/api/dashscope", async (req, res) => {
     res.end(Buffer.from(ab));
   } catch (e) {
     res.status(502).json({ error: "dashscope_proxy_failed", message: String(e?.message || e) });
+  }
+});
+
+app.use("/api/openai", async (req, res) => {
+  try {
+    if (!APIYI_API_KEY) {
+      res.status(500).json({ error: "missing_apiyi_api_key" });
+      return;
+    }
+
+    const upstreamUrl = `https://api.apiyi.com${req.originalUrl.replace(/^\/api\/openai/, "")}`;
+    const headers = {};
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (!v) continue;
+      if (k.toLowerCase() === "host") continue;
+      if (k.toLowerCase() === "content-length") continue;
+      if (k.toLowerCase() === "origin") continue;
+      headers[k] = Array.isArray(v) ? v.join(",") : String(v);
+    }
+    headers["authorization"] = `Bearer ${APIYI_API_KEY}`;
+
+    const upstreamRes = await undiciFetch(upstreamUrl, {
+      method: req.method,
+      headers,
+      body: ["GET", "HEAD"].includes(String(req.method || "").toUpperCase())
+        ? undefined
+        : req,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+
+    res.status(upstreamRes.status);
+    upstreamRes.headers.forEach((value, key) => {
+      if (key.toLowerCase() === "transfer-encoding") return;
+      if (key.toLowerCase() === "content-encoding") return;
+      if (key.toLowerCase() === "content-length") return;
+      res.setHeader(key, value);
+    });
+    const ab = await upstreamRes.arrayBuffer();
+    res.end(Buffer.from(ab));
+  } catch (e) {
+    res.status(502).json({ error: "openai_proxy_failed", message: String(e?.message || e) });
   }
 });
 

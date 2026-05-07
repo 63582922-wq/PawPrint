@@ -15,6 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/25116e53-1bc7-4f9c-8b76-50073
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set `APIYI_API_KEY` in `.env.local` to your API易令牌（用于生图与识别图片）
+3. Set `DASHSCOPE_API_KEY` in `.env.local` to your DashScope key（用于视频生成）
 3. Run the app:
    `npm run dev`

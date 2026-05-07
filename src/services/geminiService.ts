@@ -1,75 +1,46 @@
-import { Type } from "@google/genai";
-
-(() => {
-  try {
-    if (typeof window === "undefined") return;
-    if (!(import.meta as any)?.env?.DEV) return;
-    const useLocalGeminiProxy = String((import.meta as any)?.env?.VITE_GEMINI_USE_LOCAL_PROXY || "") === "true";
-    if (!useLocalGeminiProxy) return;
-    const anyGlobal = globalThis as any;
-    if (anyGlobal.__pawprint_gemini_fetch_patched) return;
-    const originalFetch: typeof fetch = globalThis.fetch.bind(globalThis);
-    globalThis.fetch = ((input: any, init?: any) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof Request
-            ? input.url
-            : String(input);
-
-      if (url.startsWith("https://generativelanguage.googleapis.com/")) {
-        const proxiedUrl = url.replace("https://generativelanguage.googleapis.com", "/api/gemini");
-        if (typeof input === "string") return originalFetch(proxiedUrl, init);
-        if (input instanceof Request) return originalFetch(new Request(proxiedUrl, input));
-        return originalFetch(proxiedUrl, init);
-      }
-
-      return originalFetch(input, init);
-    }) as any;
-    anyGlobal.__pawprint_gemini_fetch_patched = true;
-  } catch (e) {}
-})();
-
-let geminiRegionBlocked = false;
-
-function getGeminiBaseUrl() {
-  try {
-    if ((import.meta as any).env?.DEV) return "/api/gemini";
-  } catch (e) {}
-  return "/api/gemini";
+function getOpenAIBaseUrl() {
+  return "/api/openai";
 }
 
-async function geminiGenerateContent(model: string, body: any) {
-  if (geminiRegionBlocked) {
-    throw new Error(
-      JSON.stringify({
-        error: {
-          code: 400,
-          message: "User location is not supported for the API use.",
-          status: "FAILED_PRECONDITION",
-        },
-      })
-    );
-  }
-  const baseUrl = getGeminiBaseUrl();
-  const res = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+async function openaiChatCompletions(body: any) {
+  const baseUrl = getOpenAIBaseUrl();
+  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const text = await res.text();
-  if (!res.ok && text.includes("User location is not supported for the API use")) {
-    geminiRegionBlocked = true;
-  }
-  if (!res.ok) throw new Error(text || `Gemini request failed (${res.status})`);
+  if (!res.ok) throw new Error(text || `OpenAI request failed (${res.status})`);
   return JSON.parse(text || "{}");
 }
 
-function extractTextFromGeminiJson(json: any): string {
-  const cand = (json?.candidates || [])[0];
-  const parts = cand?.content?.parts || [];
-  const text = parts.find((p: any) => typeof p?.text === "string")?.text;
-  return String(text || "");
+async function openaiImagesGenerations(body: any) {
+  const baseUrl = getOpenAIBaseUrl();
+  const res = await fetch(`${baseUrl}/v1/images/generations`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `OpenAI images request failed (${res.status})`);
+  return JSON.parse(text || "{}");
+}
+
+async function openaiImagesEdits(form: FormData) {
+  const baseUrl = getOpenAIBaseUrl();
+  const res = await fetch(`${baseUrl}/v1/images/edits`, {
+    method: "POST",
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `OpenAI image edits request failed (${res.status})`);
+  return JSON.parse(text || "{}");
+}
+
+function extractTextFromOpenAIChatJson(json: any): string {
+  const c = (json?.choices || [])[0];
+  const t = c?.message?.content;
+  return typeof t === "string" ? t : "";
 }
 
 export async function analyzePetProfileFromImages(imageDatas: string[]) {
@@ -92,32 +63,29 @@ No markdown, no extra keys.`;
     )
   );
 
-  const imageParts = normalizedImages.map((data) => {
-    const parsed = parseDataUrl(data);
-    return { inline_data: { data: parsed.base64Data, mime_type: parsed.mimeType } };
-  });
+  const model = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_VISION_MODEL || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "gpt-4o-mini";
+  })();
 
-  let json: any;
-  try {
-    json = await withNetworkRetries(() =>
-      geminiGenerateContent("gemini-2.5-flash", {
-        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-        generationConfig: { responseMimeType: "application/json" },
-      })
-    );
-  } catch (e: any) {
-    const msg = String(e?.message || e || "");
-    if (msg.includes("User location is not supported")) {
-      return {
-        breed: "Unknown",
-        characteristics: [],
-        visualPrompt: "Match the pet in the reference image exactly.",
-      };
-    }
-    throw e;
+  const content: any[] = [{ type: "text", text: prompt }];
+  for (const img of normalizedImages) {
+    content.push({ type: "image_url", image_url: { url: img } });
   }
 
-  const text = extractTextFromGeminiJson(json);
+  const json = await withNetworkRetries(() =>
+    openaiChatCompletions({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content }],
+    })
+  );
+
+  const text = extractTextFromOpenAIChatJson(json);
   const parsed = JSON.parse(text || "{}");
 
   const breed = typeof parsed?.breed === "string" ? parsed.breed.trim() : "";
@@ -256,89 +224,69 @@ export async function describeSceneImage(sceneImageDataUrl: string) {
     jpegQuality: 0.85,
     maxBytes: 1_800_000,
   });
-  const img = parseDataUrl(normalized);
 
   const prompt =
     "Describe the scene in the image in 2-4 short sentences. Include: location type, major objects, lighting, and camera perspective. Do not add any style words (no anime/cartoon/illustration).";
 
-  try {
-    const json = await withNetworkRetries(() =>
-      geminiGenerateContent("gemini-2.5-flash", {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: prompt },
-              { inline_data: { data: img.base64Data, mime_type: img.mimeType } },
-            ],
-          },
-        ],
-      })
-    );
-    return extractTextFromGeminiJson(json);
-  } catch (e: any) {
-    const msg = String(e?.message || e || "");
-    if (msg.includes("User location is not supported")) return "";
-    throw e;
-  }
-}
+  const model = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_VISION_MODEL || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "gpt-4o-mini";
+  })();
 
-export async function analyzePetImages(imageDatas: string[]) {
-  const prompt = `
-    Analyze these images of a pet. 
-    1. Identify the breed and primary colors.
-    2. Identify unique physical characteristics (e.g., floppy ears, spots on back, bushy tail).
-    3. Provide a detailed prompt for an AI image generator to create a "character sheet" for this specific pet. 
-       The character sheet should include: Full body front, back, left side, right side, 45-degree angles, face close-up, paws, and tail.
-    Return the result in JSON format.
-  `;
-
-  const normalizedImages = await Promise.all(
-    imageDatas.map((d) => downscaleImageDataUrlIfNeeded(d, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 }))
+  const json = await withNetworkRetries(() =>
+    openaiChatCompletions({
+      model,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: normalized } },
+          ],
+        },
+      ],
+    })
   );
 
-  const imageParts = normalizedImages.map((data) => {
-    const parsed = parseDataUrl(data);
-    return {
-      inline_data: {
-        data: parsed.base64Data,
-        mime_type: parsed.mimeType,
-      }
-    };
-  });
-
-  try {
-    const json = await withNetworkRetries(() =>
-      geminiGenerateContent("gemini-2.5-flash", {
-        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-        generationConfig: { responseMimeType: "application/json" },
-      })
-    );
-
-    const text = extractTextFromGeminiJson(json);
-    if (!text) throw new Error("Failed to parse Gemini response");
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    throw error;
-  }
+  return extractTextFromOpenAIChatJson(json);
 }
 
 export async function generateCharacterSheet(visualPrompt: string, referenceImageDataUrl?: string) {
   const imageModel = (() => {
     try {
-      const v = String((import.meta as any)?.env?.VITE_GEMINI_IMAGE_MODEL || "").trim();
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_MODEL || "").trim();
       if (v) return v;
     } catch (e) {}
-    return "gemini-2.5-flash-image";
+    return "gpt-image-2";
   })();
 
   const imageSize = (() => {
     try {
-      const v = (import.meta as any)?.env?.VITE_CHARACTER_SHEET_IMAGE_SIZE;
-      if (v === "2K" || v === "1K") return v;
+      const v = String((import.meta as any)?.env?.VITE_CHARACTER_SHEET_IMAGE_SIZE || "").trim();
+      if (v === "2K") return "2048x2048";
+      if (v === "1K") return "1024x1024";
     } catch (e) {}
-    return "2K";
+    return "2048x2048";
+  })();
+
+  const quality = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_QUALITY || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "high";
+  })();
+
+  const outputFormat = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_IMAGE_FORMAT || "").trim().toLowerCase();
+      if (v === "png" || v === "jpeg" || v === "webp") return v;
+    } catch (e) {}
+    return "png";
   })();
 
   const promptText = `A single character sheet image containing exactly 9 grid panels arranged in a 3x3 layout. 
@@ -349,102 +297,59 @@ CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
 Subject details for reinforcement: ${visualPrompt}. 
 Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 9 panels showing different angles.`;
 
-  try {
-    const parts: any[] = [{ text: promptText }];
-    if (referenceImageDataUrl) {
-      const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
-        maxDimension: 1024,
-        jpegQuality: 0.85,
-        maxBytes: 1_500_000,
-      });
-      const ref = parseDataUrl(normalizedRef);
-      parts.push({
-        inline_data: {
-          data: ref.base64Data,
-          mime_type: ref.mimeType,
-        }
-      });
-    }
+  const getOutputMime = (fmt: string) => {
+    if (fmt === "jpeg") return "image/jpeg";
+    if (fmt === "webp") return "image/webp";
+    return "image/png";
+  };
 
-    const contents: any = [
-      {
-        role: "user",
-        parts,
-      },
-    ];
-
-    const runModel = async (model: string, requestedImageSize: string) => {
-      return await withNetworkRetries(() =>
-        geminiGenerateContent(model, {
-          contents,
-          generationConfig: {
-            responseModalities: ["IMAGE"],
-            imageConfig: {
-              aspectRatio: "1:1",
-              imageSize: requestedImageSize,
-            },
-          },
-        })
-      );
-    };
-
-    let response: any;
-    try {
-      response = await runModel(imageModel, imageSize);
-    } catch (e: any) {
-      const msg = String(e?.message || e || "");
-      const status = typeof e?.status === "number" ? e.status : null;
-      if (msg.includes("User location is not supported")) {
-        return await generateCharacterSheetViaDashscope(promptText);
+  if (referenceImageDataUrl) {
+    const normalizedRef = await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
+      maxDimension: 1536,
+      jpegQuality: 0.9,
+      maxBytes: 4_000_000,
+    });
+    const ref = parseDataUrl(normalizedRef);
+    const bytes = (() => {
+      if (typeof atob === "function") {
+        const bin = atob(ref.base64Data);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr;
       }
-      const shouldFallback =
-        imageModel !== "gemini-2.5-flash-image" &&
-        (status === 502 ||
-          msg.includes("Gemini proxy fetch failed") ||
-          msg.includes("UND_ERR_SOCKET") ||
-          msg.includes("ECONNRESET") ||
-          msg.includes("fetch failed"));
-      if (!shouldFallback) throw e;
-      console.warn(`Image model "${imageModel}" failed (${status || "n/a"}). Falling back to gemini-2.5-flash-image.`);
-      response = await runModel("gemini-2.5-flash-image", "1K");
-    }
+      const B = (globalThis as any).Buffer;
+      if (B) return new Uint8Array(B.from(ref.base64Data, "base64"));
+      throw new Error("Base64 decode not supported in this environment.");
+    })();
 
-    let base64Image = "";
-    let mimeType = "image/jpeg";
-    const candidates = response.candidates || response?.candidates || [];
-    for (const candidate of candidates) {
-      const parts = candidate?.content?.parts || candidate?.content?.parts || [];
-      for (const part of parts) {
-        const blob = part?.inlineData || part?.inline_data;
-        const data = blob?.data;
-        if (data) {
-          base64Image = data;
-          mimeType = blob?.mimeType || blob?.mime_type || mimeType;
-          break;
-        }
-      }
-      if (base64Image) break;
-    }
+    const form = new FormData();
+    form.append("model", imageModel);
+    form.append("prompt", promptText);
+    form.append("size", imageSize);
+    form.append("quality", quality);
+    form.append("n", "1");
+    form.append("output_format", outputFormat);
+    form.append("image[]", new Blob([bytes], { type: ref.mimeType }), "reference.png");
 
-    if (!base64Image) {
-      throw new Error("No image data returned from image generation model.");
-    }
-
-    return `data:${mimeType};base64,${base64Image}`;
-  } catch (error: any) {
-    console.error("Image Generation Error:", error);
-    const msg = String(error?.message || error || "");
-    if (
-      error instanceof TypeError &&
-      /fetch/i.test(msg)
-    ) {
-      throw new Error(
-        "Gemini 网络错误：Failed to fetch / ERR_CONNECTION_CLOSED。若你当前网络无法直连 Google，请在 .env 添加 VITE_GEMINI_USE_LOCAL_PROXY=true，并设置 DEV_HTTP_PROXY（例如 http://127.0.0.1:33210），重启 dev 后重试。",
-        { cause: error }
-      );
-    }
-    throw error;
+    const json = await withNetworkRetries(() => openaiImagesEdits(form));
+    const b64 = String(json?.data?.[0]?.b64_json || "");
+    if (!b64) throw new Error("No image data returned from gpt-image-2 edits.");
+    return `data:${getOutputMime(outputFormat)};base64,${b64}`;
   }
+
+  const json = await withNetworkRetries(() =>
+    openaiImagesGenerations({
+      model: imageModel,
+      prompt: promptText,
+      size: imageSize,
+      quality,
+      n: 1,
+      output_format: outputFormat,
+    })
+  );
+  const b64 = String(json?.data?.[0]?.b64_json || "");
+  if (!b64) throw new Error("No image data returned from gpt-image-2 generations.");
+  return `data:${getOutputMime(outputFormat)};base64,${b64}`;
 }
 
 export async function generateInteractivePrompt(petDescription: string, sceneDescription: string) {
@@ -459,20 +364,22 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
     `宠物信息：${petDescription}\n` +
     `场景描述：${sceneDescription}\n`;
 
-  try {
-    const json = await withNetworkRetries(() =>
-      geminiGenerateContent("gemini-2.5-flash", {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      })
-    );
-    return extractTextFromGeminiJson(json);
-  } catch (error) {
-    const msg = String((error as any)?.message || "");
-    if (!msg.includes("User location is not supported")) {
-      console.error("Prompt Generation Error:", error);
-    }
-    return sceneDescription ? `在该场景中，宠物自然互动：${sceneDescription}` : "宠物在场景中自然互动，镜头稳定，动作自然。";
-  }
+  const model = (() => {
+    try {
+      const v = String((import.meta as any)?.env?.VITE_OPENAI_TEXT_MODEL || "").trim();
+      if (v) return v;
+    } catch (e) {}
+    return "gpt-4o-mini";
+  })();
+
+  const json = await withNetworkRetries(() =>
+    openaiChatCompletions({
+      model,
+      temperature: 0.6,
+      messages: [{ role: "user", content: prompt }],
+    })
+  );
+  return extractTextFromOpenAIChatJson(json);
 }
 
 export function sanitizeVideoPromptText(text: string) {
@@ -559,98 +466,6 @@ export async function ensureTempPublicImageUrl(url: string, filenameBase: string
   if (!url) return url;
   if (!url.startsWith("data:")) return url;
   return uploadDataUrlToTempPublicUrl(url, filenameBase);
-}
-
-async function dashscopeCreateTask(path: string, body: any, dashscopeApiKey: string) {
-  const baseUrl = getDashscopeBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "X-DashScope-Async": "enable",
-      "Content-Type": "application/json",
-      ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `DashScope request failed (${res.status})`);
-  return JSON.parse(text || "{}");
-}
-
-async function dashscopeGetTask(taskId: string, dashscopeApiKey: string) {
-  const baseUrl = getDashscopeBaseUrl();
-  const res = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
-    method: "GET",
-    headers: {
-      ...(dashscopeApiKey ? { Authorization: `Bearer ${dashscopeApiKey}` } : {}),
-    },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `DashScope task request failed (${res.status})`);
-  return JSON.parse(text || "{}");
-}
-
-async function pollDashscopeTaskUntilDone(taskId: string, dashscopeApiKey: string) {
-  while (true) {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    const statusData = await dashscopeGetTask(taskId, dashscopeApiKey);
-    const taskStatus = statusData.output?.task_status;
-    if (taskStatus === "SUCCEEDED") return statusData;
-    if (taskStatus === "FAILED" || taskStatus === "CANCELED" || taskStatus === "UNKNOWN") {
-      const message = String(statusData.output?.message || "");
-      const code = String(statusData.output?.code || "");
-      throw new Error(`DashScope task failed: ${taskStatus}. ${code ? `[${code}] ` : ""}${message}`);
-    }
-  }
-}
-
-async function generateCharacterSheetViaDashscope(prompt: string) {
-  const dashscopeApiKey = getDashscopeApiKey();
-  let isProd = false;
-  try {
-    isProd = !!(import.meta as any)?.env?.PROD;
-  } catch (e) {}
-  if (!dashscopeApiKey && !isProd) {
-    throw new Error("DashScope API key is missing. Please provide VITE_DASHSCOPE_API_KEY in dev.");
-  }
-
-  const model = (() => {
-    try {
-      const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_IMAGE_MODEL || "").trim();
-      if (v) return v;
-    } catch (e) {}
-    return "wanx-v1";
-  })();
-
-  const size = (() => {
-    try {
-      const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_IMAGE_SIZE || "").trim();
-      if (v) return v;
-    } catch (e) {}
-    return "1024*1024";
-  })();
-
-  const createData = await dashscopeCreateTask(
-    "/api/v1/services/aigc/text2image/image-synthesis",
-    {
-      model,
-      input: { prompt },
-      parameters: {
-        size,
-        n: 1,
-        watermark: false,
-      },
-    },
-    dashscopeApiKey
-  );
-
-  const taskId = createData.output?.task_id;
-  if (!taskId) throw new Error("No task_id returned from DashScope image API.");
-
-  const done = await pollDashscopeTaskUntilDone(taskId, dashscopeApiKey);
-  const url = String(done.output?.results?.[0]?.url || "");
-  if (!url) throw new Error("DashScope image task succeeded but no url returned.");
-  return url;
 }
 
 export async function generatePetVideo(
@@ -909,10 +724,22 @@ export async function chatWithPet(petDescription: string, userMessage: string) {
   `;
 
   try {
-    const json = await geminiGenerateContent("gemini-2.5-flash", {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    return extractTextFromGeminiJson(json);
+    const model = (() => {
+      try {
+        const v = String((import.meta as any)?.env?.VITE_OPENAI_TEXT_MODEL || "").trim();
+        if (v) return v;
+      } catch (e) {}
+      return "gpt-4o-mini";
+    })();
+
+    const json = await withNetworkRetries(() =>
+      openaiChatCompletions({
+        model,
+        temperature: 0.8,
+        messages: [{ role: "user", content: prompt }],
+      })
+    );
+    return extractTextFromOpenAIChatJson(json);
   } catch (error) {
     console.error("Chat Error:", error);
     return "Woof! (I'm a bit shy right now)";
