@@ -580,7 +580,13 @@ export async function generatePetVideo(
     let refForVidu = normalizedRefPhoto;
     let sceneForVidu = normalizedScene;
 
-    const model = "vidu/viduq2-pro-fast_img2video";
+    const model = (() => {
+      try {
+        const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL || "").trim();
+        if (v) return v;
+      } catch (e) {}
+      return "happyhorse-1.0-r2v";
+    })();
 
     const requireHttpForVidu = (() => {
       try {
@@ -601,10 +607,16 @@ export async function generatePetVideo(
       }
     }
 
-    const media: Array<{ type: "image"; url: string }> = [];
-    media.push({ type: "image", url: cardForVidu });
-    if (refForVidu) media.push({ type: "image", url: refForVidu });
-    media.push({ type: "image", url: sceneForVidu });
+    const mediaType = model === "happyhorse-1.0-r2v" ? "reference_image" : "image";
+    const media: Array<{ type: string; url: string }> = [];
+    if (model === "happyhorse-1.0-r2v") {
+      const primaryRef = refForVidu || cardForVidu;
+      media.push({ type: mediaType, url: primaryRef });
+    } else {
+      media.push({ type: mediaType, url: cardForVidu });
+      if (refForVidu) media.push({ type: mediaType, url: refForVidu });
+      media.push({ type: mediaType, url: sceneForVidu });
+    }
 
     if (model.startsWith("vidu/") && requireHttpForVidu) {
       const all = [cardForVidu, refForVidu, sceneForVidu].filter(Boolean) as string[];
