@@ -63,15 +63,24 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
         visualPrompt: "Match the pet in the reference image exactly.",
       };
 
-      try {
-        setStatus(t.analyzing || "Analyzing appearance...");
-        analysis = await analyzePetProfileFromImages(images);
-      } catch (e) {
-        analysis = {
-          breed: "Unknown",
-          characteristics: [],
-          visualPrompt: "Match the pet in the reference image exactly.",
-        };
+      const enableAnalysis = (() => {
+        try {
+          return String((import.meta as any)?.env?.VITE_ENABLE_PET_ANALYSIS || "") === "true";
+        } catch (e) {}
+        return false;
+      })();
+
+      if (enableAnalysis) {
+        try {
+          setStatus(t.analyzing || "Analyzing appearance...");
+          analysis = await analyzePetProfileFromImages(images);
+        } catch (e) {
+          analysis = {
+            breed: "Unknown",
+            characteristics: [],
+            visualPrompt: "Match the pet in the reference image exactly.",
+          };
+        }
       }
       
       // Generate Character Sheet Image
