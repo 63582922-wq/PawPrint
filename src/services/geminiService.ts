@@ -585,8 +585,10 @@ export async function generatePetVideo(
         const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL || "").trim();
         if (v) return v;
       } catch (e) {}
-      return "happyhorse-1.0-r2v";
+      return "wan2.6-I2V-flash";
     })();
+
+    const isWanI2v = /^wan/i.test(model);
 
     const requireHttpForVidu = (() => {
       try {
@@ -595,7 +597,8 @@ export async function generatePetVideo(
       return false;
     })();
 
-    const shouldUploadToPublic = isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v";
+    const shouldUploadToPublic =
+      isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v" || isWanI2v;
 
     if (shouldUploadToPublic) {
       if (cardForVidu.startsWith("data:")) {
@@ -611,13 +614,15 @@ export async function generatePetVideo(
 
     const mediaType = model === "happyhorse-1.0-r2v" ? "reference_image" : "image";
     const media: Array<{ type: string; url: string }> = [];
-    if (model === "happyhorse-1.0-r2v") {
-      const primaryRef = refForVidu || cardForVidu;
-      media.push({ type: mediaType, url: primaryRef });
-    } else {
-      media.push({ type: mediaType, url: cardForVidu });
-      if (refForVidu) media.push({ type: mediaType, url: refForVidu });
-      media.push({ type: mediaType, url: sceneForVidu });
+    if (!isWanI2v) {
+      if (model === "happyhorse-1.0-r2v") {
+        const primaryRef = refForVidu || cardForVidu;
+        media.push({ type: mediaType, url: primaryRef });
+      } else {
+        media.push({ type: mediaType, url: cardForVidu });
+        if (refForVidu) media.push({ type: mediaType, url: refForVidu });
+        media.push({ type: mediaType, url: sceneForVidu });
+      }
     }
 
     if (model.startsWith("vidu/") && requireHttpForVidu) {
@@ -640,6 +645,18 @@ export async function generatePetVideo(
       };
 
       if (includeAudio) parameters.audio = true;
+
+      if (isWanI2v) {
+        const imgUrl = sceneForVidu;
+        return {
+          model,
+          input: {
+            prompt: systemPrompt,
+            img_url: imgUrl,
+          },
+          parameters,
+        };
+      }
 
       return {
         model,
