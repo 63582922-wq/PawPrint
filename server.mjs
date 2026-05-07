@@ -151,13 +151,34 @@ app.use("/api/openai", async (req, res) => {
     }
     headers["authorization"] = `Bearer ${APIYI_API_KEY}`;
 
+    const method = String(req.method || "GET").toUpperCase();
+    const contentType = String(req.headers["content-type"] || "");
+    let body = undefined;
+    if (!["GET", "HEAD"].includes(method)) {
+      if (contentType.toLowerCase().includes("application/json")) {
+        headers["content-type"] = "application/json";
+        body = JSON.stringify(req.body ?? {});
+      } else {
+        const MAX_BYTES = 25 * 1024 * 1024;
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of req) {
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          size += buf.length;
+          if (size > MAX_BYTES) {
+            res.status(413).json({ error: "payload_too_large" });
+            return;
+          }
+          chunks.push(buf);
+        }
+        body = chunks.length ? Buffer.concat(chunks) : undefined;
+      }
+    }
+
     const upstreamRes = await undiciFetch(upstreamUrl, {
       method: req.method,
       headers,
-      body: ["GET", "HEAD"].includes(String(req.method || "").toUpperCase())
-        ? undefined
-        : req,
-      duplex: "half",
+      body,
       ...(dispatcher ? { dispatcher } : {}),
     });
 
