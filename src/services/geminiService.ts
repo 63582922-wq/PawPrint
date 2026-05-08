@@ -636,6 +636,7 @@ export async function generatePetVideo(
     })();
 
     const isWanI2v = (m: string) => /^wan/i.test(m);
+    const isKlingOmni = (m: string) => /kling/i.test(m);
 
     const requireHttpForVidu = (() => {
       try {
@@ -693,6 +694,11 @@ export async function generatePetVideo(
       const mediaType = m === "happyhorse-1.0-r2v" ? "reference_image" : "image";
       const media: Array<{ type: string; url: string }> = [];
       if (isWanI2v(m)) return media;
+      if (isKlingOmni(m)) {
+        media.push({ type: mediaType, url: cardInline });
+        media.push({ type: mediaType, url: sceneInline });
+        return media;
+      }
       if (m === "happyhorse-1.0-r2v") {
         const primaryRef = refInline || cardInline;
         media.push({ type: mediaType, url: primaryRef });
@@ -717,13 +723,38 @@ export async function generatePetVideo(
 
     const buildPayload = (includeAudio: boolean) => {
       const parameters: Record<string, any> = {
-        duration: 10,
+        duration: (() => {
+          try {
+            const v = Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
+            if (Number.isFinite(v) && v > 0) return v;
+          } catch (e) {}
+          return isKlingOmni(model) ? 6 : 10;
+        })(),
         resolution: "1080P",
         size: "1080*1920",
         watermark: false,
       };
 
-      if (includeAudio) parameters.audio = true;
+      const wantAudio = (() => {
+        try {
+          const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_ENABLE_AUDIO || "").trim();
+          if (v === "true") return true;
+          if (v === "false") return false;
+        } catch (e) {}
+        return includeAudio;
+      })();
+
+      if (!isKlingOmni(model) && wantAudio) parameters.audio = true;
+      if (isKlingOmni(model)) {
+        const mode = (() => {
+          try {
+            const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE || "").trim().toLowerCase();
+            if (v) return v;
+          } catch (e) {}
+          return "pro";
+        })();
+        parameters.mode = mode;
+      }
 
       if (isWanI2v(model)) {
         return {
@@ -805,7 +836,7 @@ export async function generatePetVideo(
 
     let createData: any;
     try {
-      createData = await doCreate(true);
+      createData = await doCreate(!isKlingOmni(model));
     } catch (e: any) {
       const msg = String(e?.message || "");
       if (msg.includes("Model not exist")) {
@@ -817,7 +848,7 @@ export async function generatePetVideo(
               : "happyhorse-1.0-r2v";
         model = alt;
         try {
-          createData = await doCreate(true);
+          createData = await doCreate(!isKlingOmni(model));
         } catch (e2: any) {
           const msg2 = String(e2?.message || "");
           if (msg2.includes("audio") || msg2.includes("InvalidParameter")) {
