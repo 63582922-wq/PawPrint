@@ -371,6 +371,7 @@ app.use("/api/dashscope", async (req, res) => {
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
+      if (key.toLowerCase() === "content-encoding") return;
       if (key.toLowerCase() === "content-length") return;
       res.setHeader(key, value);
     });
@@ -437,6 +438,7 @@ app.use("/api/openai", async (req, res) => {
     res.status(upstreamRes.status);
     upstreamRes.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
+      if (key.toLowerCase() === "content-encoding") return;
       if (key.toLowerCase() === "content-length") return;
       res.setHeader(key, value);
     });
