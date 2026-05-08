@@ -368,10 +368,11 @@ export async function generateInteractivePrompt(petDescription: string, sceneDes
   const prompt =
     `你是一个分镜与动作导演。根据“宠物信息”和“场景描述”，为图生视频生成一段动作+镜头提示词。\n` +
     `要求：\n` +
-    `- 只描述动作、镜头与环境交互，不要写画风合同。\n` +
+    `- 图生视频的场景已由图片提供：不要复述场景细节、不要新增道具与布景。\n` +
+    `- 只输出“主体动作”一句话（中文，10-30字），动作必须能在 6 秒内完成。\n` +
     `- 不要出现人类，不要出现文字/字幕/水印。\n` +
     `- 镜头稳定，动作自然，避免夸张形变。\n` +
-    `- 输出用中文，3-6 句即可。\n` +
+    `- 不要输出多句，不要输出列表。\n` +
     `\n` +
     `宠物信息：${petDescription}\n` +
     `场景描述：${sceneDescription}\n`;
@@ -406,13 +407,14 @@ export function compileVideoUserIntentToPrompt(intent: string) {
     .split(/[\n。！？!?]+/g)
     .map((s) => s.trim())
     .filter(Boolean);
-  const core = (sentences.slice(0, 2).join("，") || "宠物在镜头前方自然互动").trim();
+  const coreRaw = (sentences.slice(0, 2).join("，") || "宠物跑向镜头并在镜头前方小范围互动").trim();
+  const core = coreRaw.length > 60 ? `${coreRaw.slice(0, 60)}…` : coreRaw;
 
   return [
-    "第一视角手机镜头，机位与视角必须严格保持在场景图所示范围内。",
-    "镜头不得转向到场景图之外（不允许突然换角度/跳切/环绕/俯拍/反打等新视角）。",
-    `在不改变场景布局与光照的前提下：${core}。`,
-    "动作尽量发生在镜头前方小范围内，镜头稳定为主，只允许非常轻微平滑移动或轻微手持感。",
+    "竖屏 9:16，第一视角手机镜头。",
+    "镜头角度与构图必须严格保持在场景图的视角范围内；禁止转向到场景图之外，禁止切换新角度/环绕/俯拍/反打。",
+    "场景必须与场景图一致：不新增/不删除/不移动主要物体，不改变空间布局与光照方向。",
+    `宠物动作（保持简单可执行）：${core}。`,
   ].join("\n");
 }
 
@@ -523,6 +525,7 @@ export async function generatePetVideo(
     (referencePhotoPath ? `- 第3张：宠物原始照片（细节加固：毛色、花纹、眼睛颜色）\n` : "") +
     `\n` +
     `【镜头与叙事（关键）】\n` +
+    `- 竖屏 9:16。\n` +
     `- 这是手机拍摄的第一视角：镜头在拍摄者眼高附近，轻微手持感，稳定为主。\n` +
     `- 镜头角度必须严格保持在场景图的视角范围内，不允许转向到场景图之外；不允许切换到新的视角（俯拍/仰拍/侧面/反打/环绕）。\n` +
     `- 不要写复杂分镜，不要大幅改造空间；避免“新增不存在的家具/道具/窗景/光源”。\n` +
@@ -607,7 +610,7 @@ export async function generatePetVideo(
             const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE || "").trim();
             if (v) return v;
           } catch (e) {}
-          return "1920*1080";
+          return "1080*1920";
         })(),
         watermark: false,
       };
