@@ -565,181 +565,32 @@ export async function generatePetVideo(
       return downscaleImageDataUrlIfNeeded(dataUrl, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
     };
 
-    const imageBitmapFromDataUrl = async (dataUrl: string) => {
-      if (!dataUrl.startsWith("data:")) throw new Error("Expected data URL.");
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const anyGlobal: any = globalThis as any;
-      if (typeof anyGlobal?.createImageBitmap === "function") {
-        return anyGlobal.createImageBitmap(blob);
-      }
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.onerror = () => reject(new Error("Failed to decode image."));
-        i.src = dataUrl;
-      });
-      return img;
-    };
-
-    const cropCenterPanelFromGrid = async (gridDataUrl: string) => {
-      const bmp: any = await imageBitmapFromDataUrl(gridDataUrl);
-      const w = Number((bmp as any).width || (bmp as any).naturalWidth || 0);
-      const h = Number((bmp as any).height || (bmp as any).naturalHeight || 0);
-      if (!w || !h) return gridDataUrl;
-      const cellW = Math.floor(w / 3);
-      const cellH = Math.floor(h / 3);
-      const sx = cellW;
-      const sy = cellH;
-      const sw = Math.max(1, cellW);
-      const sh = Math.max(1, cellH);
-      const target = 768;
-      const canvas = document.createElement("canvas");
-      canvas.width = target;
-      canvas.height = target;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return gridDataUrl;
-      ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, target, target);
-      return canvas.toDataURL("image/jpeg", 0.9);
-    };
-
-    const composeFirstFrame = async (sceneDataUrl: string, petDataUrl: string) => {
-      const sceneBmp: any = await imageBitmapFromDataUrl(sceneDataUrl);
-      const petBmp: any = await imageBitmapFromDataUrl(petDataUrl);
-      const w = 720;
-      const h = 1280;
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return sceneDataUrl;
-
-      ctx.drawImage(sceneBmp, 0, 0, w, h);
-
-      const petSize = Math.floor(w * 0.42);
-      const px = Math.floor((w - petSize) / 2);
-      const py = Math.floor(h * 0.52);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(px + petSize / 2, py + petSize / 2, petSize / 2, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(petBmp, px, py, petSize, petSize);
-      ctx.restore();
-
-      return canvas.toDataURL("image/jpeg", 0.9);
-    };
-
-    const normalizedScene = scenePhotoPath.startsWith("data:")
-      ? await downscaleImageDataUrlIfNeeded(scenePhotoPath, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
-      : scenePhotoPath;
-    const normalizedCard = characterCardPath.startsWith("data:")
-      ? await downscaleImageDataUrlIfNeeded(characterCardPath, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
-      : characterCardPath;
-    const normalizedRefPhoto =
-      referencePhotoPath && referencePhotoPath.startsWith("data:")
-        ? await downscaleImageDataUrlIfNeeded(referencePhotoPath, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
-        : referencePhotoPath;
-    
-    let cardForVidu = normalizedCard;
-    let refForVidu = normalizedRefPhoto;
-    let sceneForVidu = normalizedScene;
-
-    let model = (() => {
+    const model = (() => {
       try {
         const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL || "").trim();
         if (v) return v;
       } catch (e) {}
-      return "wan2.6-i2v-flash";
+      return "kling-v3-omni-video-generation";
     })();
 
-    const isWanI2v = (m: string) => /^wan/i.test(m);
-    const isKlingOmni = (m: string) => /kling/i.test(m);
-
-    const requireHttpForVidu = (() => {
-      try {
-        return String((import.meta as any)?.env?.VITE_VIDU_REQUIRE_HTTP_URL || "") === "true";
-      } catch (e) {}
-      return false;
-    })();
-
-    const shouldUploadToPublic =
-      isProd || requireHttpForVidu || model === "happyhorse-1.0-r2v" || isWanI2v(model);
-
-    if (shouldUploadToPublic) {
-      if (cardForVidu.startsWith("data:")) {
-        cardForVidu = await uploadDataUrlToTempPublicUrl(cardForVidu, "pawprint-card");
-      }
-      if (refForVidu && refForVidu.startsWith("data:")) {
-        refForVidu = await uploadDataUrlToTempPublicUrl(refForVidu, "pawprint-ref");
-      }
-      if (sceneForVidu.startsWith("data:")) {
-        sceneForVidu = await uploadDataUrlToTempPublicUrl(sceneForVidu, "pawprint-scene");
-      }
+    const isKlingOmni = /kling/i.test(model);
+    if (!isKlingOmni) {
+      throw new Error(
+        `当前仅支持 Kling Omni 多图参考视频模型。请把 VITE_DASHSCOPE_VIDEO_MODEL 设置为 kling-v3-omni-video-generation（当前：${model}）。`
+      );
     }
 
-    const preferInlineMedia = true;
-    const cardInline = preferInlineMedia ? await ensureDashscopeInlineImage(cardForVidu, "pawprint-card") : cardForVidu;
-    const refInline = refForVidu ? (preferInlineMedia ? await ensureDashscopeInlineImage(refForVidu, "pawprint-ref") : refForVidu) : undefined;
-    const sceneInline = preferInlineMedia ? await ensureDashscopeInlineImage(sceneForVidu, "pawprint-scene") : sceneForVidu;
-
-    let wanImgUrl = sceneInline;
-    if (isWanI2v(model)) {
-      try {
-        if (typeof document !== "undefined") {
-          const petBase = cardInline || refInline || "";
-          if (petBase && sceneInline && petBase.startsWith("data:") && sceneInline.startsWith("data:")) {
-            const petCrop = await cropCenterPanelFromGrid(petBase);
-            const composed = await composeFirstFrame(sceneInline, petCrop);
-            wanImgUrl = await downscaleImageDataUrlIfNeeded(composed, {
-              maxDimension: 1280,
-              jpegQuality: 0.85,
-              maxBytes: 1_800_000,
-            });
-          } else if (petBase && petBase.startsWith("data:")) {
-            const petCrop = await cropCenterPanelFromGrid(petBase);
-            wanImgUrl = await downscaleImageDataUrlIfNeeded(petCrop, {
-              maxDimension: 1280,
-              jpegQuality: 0.85,
-              maxBytes: 1_800_000,
-            });
-          }
-        }
-      } catch (e) {}
-    }
-
-    const buildMedia = (m: string) => {
-      const mediaType = m === "happyhorse-1.0-r2v" ? "reference_image" : "image";
+    const cardInline = await ensureDashscopeInlineImage(characterCardPath, "pawprint-card");
+    const refInline = referencePhotoPath ? await ensureDashscopeInlineImage(referencePhotoPath, "pawprint-ref") : undefined;
+    const sceneInline = await ensureDashscopeInlineImage(scenePhotoPath, "pawprint-scene");
+    const buildMedia = () => {
+      const mediaType = "image";
       const media: Array<{ type: string; url: string }> = [];
-      if (isWanI2v(m)) return media;
-      if (isKlingOmni(m)) {
-        media.push({ type: mediaType, url: sceneInline });
-        media.push({ type: mediaType, url: cardInline });
-        if (refInline) media.push({ type: mediaType, url: refInline });
-        return media;
-      }
-      if (m === "happyhorse-1.0-r2v") {
-        const primaryRef = refInline || cardInline;
-        media.push({ type: mediaType, url: primaryRef });
-        return media;
-      }
+      media.push({ type: mediaType, url: sceneInline });
       media.push({ type: mediaType, url: cardInline });
       if (refInline) media.push({ type: mediaType, url: refInline });
-      media.push({ type: mediaType, url: sceneInline });
       return media;
     };
-
-    if (model.startsWith("vidu/") && requireHttpForVidu) {
-      const all = [cardForVidu, refForVidu, sceneForVidu].filter(Boolean) as string[];
-      const nonHttp = all.find((u) => !/^https?:\/\//i.test(u));
-      if (nonHttp) {
-        throw new Error(
-          `Vidu 参考图必须是公网可访问的 http(s) URL。当前传入的是：${nonHttp.slice(0, 32)}...。` +
-            `请把角色卡/原图/场景图上传到 OSS/图床并粘贴 URL 后再生成视频。`
-        );
-      }
-    }
 
     const buildPayload = (includeAudio: boolean) => {
       const parameters: Record<string, any> = {
@@ -748,7 +599,7 @@ export async function generatePetVideo(
             const v = Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
             if (Number.isFinite(v) && v > 0) return v;
           } catch (e) {}
-          return isKlingOmni(model) ? 6 : 10;
+          return 6;
         })(),
         resolution: "1080P",
         size: (() => {
@@ -756,7 +607,7 @@ export async function generatePetVideo(
             const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE || "").trim();
             if (v) return v;
           } catch (e) {}
-          return isKlingOmni(model) ? "1920*1080" : "1080*1920";
+          return "1920*1080";
         })(),
         watermark: false,
       };
@@ -770,34 +621,23 @@ export async function generatePetVideo(
         return includeAudio;
       })();
 
-      if (!isKlingOmni(model) && wantAudio) parameters.audio = true;
-      if (isKlingOmni(model)) {
-        const mode = (() => {
-          try {
-            const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE || "").trim().toLowerCase();
-            if (v) return v;
-          } catch (e) {}
-          return "pro";
-        })();
-        parameters.mode = mode;
+      if (wantAudio) {
+        throw new Error("Kling Omni 当前配置为无音频模式。如需音频请启用其他支持音频的模型。");
       }
-
-      if (isWanI2v(model)) {
-        return {
-          model,
-          input: {
-            prompt: systemPrompt,
-            img_url: wanImgUrl,
-          },
-          parameters,
-        };
-      }
+      const mode = (() => {
+        try {
+          const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE || "").trim().toLowerCase();
+          if (v) return v;
+        } catch (e) {}
+        return "pro";
+      })();
+      parameters.mode = mode;
 
       return {
         model,
         input: {
           prompt: systemPrompt,
-          media: buildMedia(model),
+          media: buildMedia(),
         },
         parameters,
       };
@@ -860,35 +700,7 @@ export async function generatePetVideo(
       }
     };
 
-    let createData: any;
-    try {
-      createData = await doCreate(!isKlingOmni(model));
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.includes("Model not exist")) {
-        const alt =
-          model === "wan2.6-I2V-flash"
-            ? "wan2.6-i2v-flash"
-            : model === "wan2.6-i2v-flash"
-              ? "wan2.6-I2V-flash"
-              : "happyhorse-1.0-r2v";
-        model = alt;
-        try {
-          createData = await doCreate(!isKlingOmni(model));
-        } catch (e2: any) {
-          const msg2 = String(e2?.message || "");
-          if (msg2.includes("audio") || msg2.includes("InvalidParameter")) {
-            createData = await doCreate(false);
-          } else {
-            throw e2;
-          }
-        }
-      } else if (msg.includes("audio") || msg.includes("InvalidParameter")) {
-        createData = await doCreate(false);
-      } else {
-        throw e;
-      }
-    }
+    const createData: any = await doCreate(false);
 
     const taskId = createData.output?.task_id;
     if (!taskId) throw new Error("No task_id returned from DashScope API.");
