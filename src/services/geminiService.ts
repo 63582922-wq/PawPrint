@@ -270,13 +270,18 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
     return "2K";
   })();
 
-  const promptText = `A single character sheet image containing exactly 9 grid panels arranged in a 3x3 layout. 
+  const promptText = `A single widescreen (16:9) character sheet image containing exactly 4 grid panels arranged in a 2x2 layout (NO other panels).
+Panels must be:
+- Front view (full body)
+- Side view (full body)
+- Back view (full body)
+- Head close-up (face details)
 CRITICAL REQUIREMENT: The subject must look EXACTLY like the described pet (same breed, same colors, same markings, same physical traits).
 CRITICAL REQUIREMENT: Do NOT include any text, letters, numbers, or labels anywhere in the image.
 CRITICAL REQUIREMENT: The style MUST be photorealistic and photographic. Do NOT use anime, cartoon, illustration, or stylized drawing styles.
 CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
-Subject details for reinforcement: ${visualPrompt}. 
-Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 9 panels showing different angles.`;
+Subject details for reinforcement: ${visualPrompt}.
+Background must be pure solid white (#FFFFFF) with no gradients, no texture, no props, no floor, and no shadows. Maintain 100% character consistency across all 4 panels.`;
 
   const normalizedRefForModel = referenceImageDataUrl
     ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
@@ -299,7 +304,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
         generationConfig: {
           responseModalities: ["IMAGE"],
           imageConfig: {
-            aspectRatio: "1:1",
+            aspectRatio: "16:9",
             imageSize,
           },
         },
