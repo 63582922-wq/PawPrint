@@ -272,12 +272,13 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
 
   const aspectRatio = "16:9";
   const promptText = `A single widescreen (16:9) character sheet image containing exactly 4 grid panels arranged in a 2x2 layout (NO other panels).
-Panels must be:
-- Front view (full body)
-- Side view (full body)
-- Back view (full body)
-- Head close-up (face details)
+Layout must be EXACTLY:
+- Top-left: Front view (full body)
+- Top-right: Side view (full body)
+- Bottom-left: Back view (full body)
+- Bottom-right: Head close-up (face details, eyes/ears/nose clearly visible)
 CRITICAL REQUIREMENT: The subject must look EXACTLY like the described pet (same breed, same colors, same markings, same physical traits).
+CRITICAL REQUIREMENT: Lock fine facial details: eye shape and color, nose color, whisker pads, muzzle shape, and ear shape/position (including folded ears if present). Do not simplify or change these details across panels.
 CRITICAL REQUIREMENT: Do NOT include any text, letters, numbers, or labels anywhere in the image.
 CRITICAL REQUIREMENT: The style MUST be photorealistic and photographic. Do NOT use anime, cartoon, illustration, or stylized drawing styles.
 CRITICAL REQUIREMENT: The subject must be an animal pet (NOT a human).
@@ -286,9 +287,9 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
 
   const normalizedRefForModel = referenceImageDataUrl
     ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
-        maxDimension: 1024,
-        jpegQuality: 0.85,
-        maxBytes: 1_200_000,
+        maxDimension: 1280,
+        jpegQuality: 0.9,
+        maxBytes: 1_800_000,
       })
     : undefined;
 
@@ -318,13 +319,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
 
   const httpRefUrl = referenceImageDataUrl && /^https?:\/\//i.test(referenceImageDataUrl) ? referenceImageDataUrl : undefined;
 
-  const normalizedRefForUpload = referenceImageDataUrl && !httpRefUrl
-    ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
-        maxDimension: 768,
-        jpegQuality: 0.82,
-        maxBytes: 450_000,
-      })
-    : undefined;
+  const normalizedRefForUpload = referenceImageDataUrl && !httpRefUrl ? normalizedRefForModel : undefined;
 
   const referenceImageUrl = httpRefUrl || (normalizedRefForUpload ? await ensureTempPublicImageUrl(normalizedRefForUpload, "pawprint-ref") : undefined);
 
@@ -721,6 +716,7 @@ export async function generatePetVideo(
       if (isKlingOmni(m)) {
         media.push({ type: mediaType, url: sceneInline });
         media.push({ type: mediaType, url: cardInline });
+        if (refInline) media.push({ type: mediaType, url: refInline });
         return media;
       }
       if (m === "happyhorse-1.0-r2v") {
