@@ -546,6 +546,72 @@ export async function generatePetVideo(
       return downscaleImageDataUrlIfNeeded(dataUrl, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
     };
 
+    const imageBitmapFromDataUrl = async (dataUrl: string) => {
+      if (!dataUrl.startsWith("data:")) throw new Error("Expected data URL.");
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const anyGlobal: any = globalThis as any;
+      if (typeof anyGlobal?.createImageBitmap === "function") {
+        return anyGlobal.createImageBitmap(blob);
+      }
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error("Failed to decode image."));
+        i.src = dataUrl;
+      });
+      return img;
+    };
+
+    const cropCenterPanelFromGrid = async (gridDataUrl: string) => {
+      const bmp: any = await imageBitmapFromDataUrl(gridDataUrl);
+      const w = Number((bmp as any).width || (bmp as any).naturalWidth || 0);
+      const h = Number((bmp as any).height || (bmp as any).naturalHeight || 0);
+      if (!w || !h) return gridDataUrl;
+      const cellW = Math.floor(w / 3);
+      const cellH = Math.floor(h / 3);
+      const sx = cellW;
+      const sy = cellH;
+      const sw = Math.max(1, cellW);
+      const sh = Math.max(1, cellH);
+      const target = 768;
+      const canvas = document.createElement("canvas");
+      canvas.width = target;
+      canvas.height = target;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return gridDataUrl;
+      ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, target, target);
+      return canvas.toDataURL("image/jpeg", 0.9);
+    };
+
+    const composeFirstFrame = async (sceneDataUrl: string, petDataUrl: string) => {
+      const sceneBmp: any = await imageBitmapFromDataUrl(sceneDataUrl);
+      const petBmp: any = await imageBitmapFromDataUrl(petDataUrl);
+      const w = 720;
+      const h = 1280;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return sceneDataUrl;
+
+      ctx.drawImage(sceneBmp, 0, 0, w, h);
+
+      const petSize = Math.floor(w * 0.42);
+      const px = Math.floor((w - petSize) / 2);
+      const py = Math.floor(h * 0.52);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px + petSize / 2, py + petSize / 2, petSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(petBmp, px, py, petSize, petSize);
+      ctx.restore();
+
+      return canvas.toDataURL("image/jpeg", 0.9);
+    };
+
     const normalizedScene = scenePhotoPath.startsWith("data:")
       ? await downscaleImageDataUrlIfNeeded(scenePhotoPath, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
       : scenePhotoPath;
@@ -598,6 +664,31 @@ export async function generatePetVideo(
     const refInline = refForVidu ? (preferInlineMedia ? await ensureDashscopeInlineImage(refForVidu, "pawprint-ref") : refForVidu) : undefined;
     const sceneInline = preferInlineMedia ? await ensureDashscopeInlineImage(sceneForVidu, "pawprint-scene") : sceneForVidu;
 
+    let wanImgUrl = sceneInline;
+    if (isWanI2v(model)) {
+      try {
+        if (typeof document !== "undefined") {
+          const petBase = cardInline || refInline || "";
+          if (petBase && sceneInline && petBase.startsWith("data:") && sceneInline.startsWith("data:")) {
+            const petCrop = await cropCenterPanelFromGrid(petBase);
+            const composed = await composeFirstFrame(sceneInline, petCrop);
+            wanImgUrl = await downscaleImageDataUrlIfNeeded(composed, {
+              maxDimension: 1280,
+              jpegQuality: 0.85,
+              maxBytes: 1_800_000,
+            });
+          } else if (petBase && petBase.startsWith("data:")) {
+            const petCrop = await cropCenterPanelFromGrid(petBase);
+            wanImgUrl = await downscaleImageDataUrlIfNeeded(petCrop, {
+              maxDimension: 1280,
+              jpegQuality: 0.85,
+              maxBytes: 1_800_000,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
     const buildMedia = (m: string) => {
       const mediaType = m === "happyhorse-1.0-r2v" ? "reference_image" : "image";
       const media: Array<{ type: string; url: string }> = [];
@@ -635,12 +726,11 @@ export async function generatePetVideo(
       if (includeAudio) parameters.audio = true;
 
       if (isWanI2v(model)) {
-        const imgUrl = sceneInline;
         return {
           model,
           input: {
             prompt: systemPrompt,
-            img_url: imgUrl,
+            img_url: wanImgUrl,
           },
           parameters,
         };
