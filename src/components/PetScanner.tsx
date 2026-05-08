@@ -102,6 +102,7 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
         gender: petGender || "Unknown",
         birthday: petBirthday || "",
         characteristics: analysis?.characteristics || [],
+        visualPrompt: analysis?.visualPrompt || "Match the pet in the reference image exactly.",
         avatarUrl: finalAvatarUrl,
         referencePhotoUrl: finalRefUrl,
         characterSheetUrl: finalCharacterSheetUrl,

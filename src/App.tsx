@@ -122,6 +122,11 @@ export default function App() {
     setActiveTab('id');
   };
 
+  const handlePetUpdated = (updatedPet: PetID) => {
+    setPetID(updatedPet);
+    safeSetLocalStorage('pawprint_pet', JSON.stringify(updatedPet));
+  };
+
   const handleInteractionSaved = (newInteraction: InteractionVideo) => {
     const updated = [newInteraction, ...interactions];
     setInteractions(updated);
@@ -235,7 +240,7 @@ export default function App() {
               className="px-4 py-6"
             >
               {petID ? (
-                <PetIDCard pet={petID} onReset={() => setActiveTab('scan')} t={t} />
+                <PetIDCard pet={petID} onReset={() => setActiveTab('scan')} onUpdate={handlePetUpdated} t={t} />
               ) : (
                 <div className="flex flex-col items-center justify-center pt-20 text-center">
                   <div className="mb-6 rounded-3xl bg-orange-100 p-8 text-orange-600">

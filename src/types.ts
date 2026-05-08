@@ -5,6 +5,7 @@ export type PetID = {
   gender: string;
   birthday: string;
   characteristics: string[];
+  visualPrompt?: string;
   avatarUrl: string;
   characterSheetUrl: string;
   referencePhotoUrl?: string;

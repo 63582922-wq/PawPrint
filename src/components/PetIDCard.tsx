@@ -8,15 +8,17 @@ import { chatWithPet } from '../services/geminiService';
 interface PetIDCardProps {
   pet: PetID;
   onReset: () => void;
+  onUpdate: (pet: PetID) => void;
   t: any;
 }
 
-export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
+export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps) {
   const showDevTools = !!import.meta.env.DEV;
   const [chatMessage, setChatMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [lastPetReply, setLastPetReply] = useState<string | null>(null);
   const [characterSheetSize, setCharacterSheetSize] = useState<{ w: number; h: number } | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const getDataUrlMime = (dataUrl: string) => {
     const m = dataUrl.match(/^data:([^;]+);base64,/i);
@@ -112,6 +114,22 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
 
   const handleDownloadOriginalPhoto = () => {
     downloadToFile(pet.avatarUrl, `${pet.name || "pet"}-original.jpg`);
+  };
+
+  const handleRegenerateCharacterSheet = async () => {
+    if (isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      const { generateCharacterSheet } = await import("../services/geminiService");
+      const ref = pet.referencePhotoUrl || pet.avatarUrl || "";
+      const prompt = (pet as any)?.visualPrompt || `Match the pet in the reference image exactly.`;
+      const newUrl = await generateCharacterSheet(String(prompt || ""), String(ref || ""));
+      onUpdate({ ...pet, characterSheetUrl: newUrl });
+    } catch (e) {
+      alert(t.generationError ? `${t.generationError}${String((e as any)?.message || e)}` : String((e as any)?.message || e));
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   return (
@@ -232,6 +250,19 @@ export default function PetIDCard({ pet, onReset, t }: PetIDCardProps) {
              {isTyping ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
            </button>
         </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={handleRegenerateCharacterSheet}
+          disabled={isRegenerating}
+          className={cn(
+            "flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-gray-900 shadow-sm ring-1 ring-gray-100 transition-all active:scale-[0.98]",
+            isRegenerating ? "opacity-70 cursor-not-allowed" : "hover:bg-gray-50"
+          )}
+        >
+          {isRegenerating ? (t.regeneratingCard || "Regenerating...") : (t.regenerateCard || "Regenerate Character Sheet")}
+        </button>
       </div>
 
       {/* Grid Display */}

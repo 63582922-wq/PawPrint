@@ -315,7 +315,9 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
     return `data:${img.mimeType};base64,${img.base64Data}`;
   }
 
-  const normalizedRefForUpload = referenceImageDataUrl
+  const httpRefUrl = referenceImageDataUrl && /^https?:\/\//i.test(referenceImageDataUrl) ? referenceImageDataUrl : undefined;
+
+  const normalizedRefForUpload = referenceImageDataUrl && !httpRefUrl
     ? await downscaleImageDataUrlIfNeeded(referenceImageDataUrl, {
         maxDimension: 768,
         jpegQuality: 0.82,
@@ -323,9 +325,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
       })
     : undefined;
 
-  const referenceImageUrl = normalizedRefForUpload
-    ? await ensureTempPublicImageUrl(normalizedRefForUpload, "pawprint-ref")
-    : undefined;
+  const referenceImageUrl = httpRefUrl || (normalizedRefForUpload ? await ensureTempPublicImageUrl(normalizedRefForUpload, "pawprint-ref") : undefined);
 
   const startRes = await withNetworkRetries(() =>
     fetch("/api/nano-banana/generate-character-sheet?async=1", {
