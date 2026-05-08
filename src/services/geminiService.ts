@@ -270,6 +270,7 @@ export async function generateCharacterSheet(visualPrompt: string, referenceImag
     return "2K";
   })();
 
+  const aspectRatio = "16:9";
   const promptText = `A single widescreen (16:9) character sheet image containing exactly 4 grid panels arranged in a 2x2 layout (NO other panels).
 Panels must be:
 - Front view (full body)
@@ -304,7 +305,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
         generationConfig: {
           responseModalities: ["IMAGE"],
           imageConfig: {
-            aspectRatio: "16:9",
+            aspectRatio,
             imageSize,
           },
         },
@@ -336,6 +337,7 @@ Background must be pure solid white (#FFFFFF) with no gradients, no texture, no 
         referenceImageUrl,
         imageModel,
         imageSize,
+        aspectRatio,
       }),
     })
   );
@@ -504,10 +506,10 @@ export async function generatePetVideo(
   const systemPrompt =
     `你是一个极其严格的电影导演与一致性审查员。请基于参考图片生成一段写实摄影风格的视频。\n` +
     `\n` +
-    `【参考素材顺序】\n` +
-    `- 第1张：宠物角色卡（多角度一致性、体型比例、身份锁定）\n` +
-    (referencePhotoPath ? `- 第2张：宠物原始照片（细节锁定：毛色、花纹、脸部细节、眼睛颜色）\n` : "") +
-    `- ${referencePhotoPath ? "第3张" : "第2张"}：场景环境（空间布局、主要物体、光照方向与色温、镜头视角）\n` +
+    `【参考素材顺序（非常重要）】\n` +
+    `- 第1张：场景环境（空间布局、主要物体、光照方向与色温、镜头视角）必须严格遵循\n` +
+    `- 第2张：宠物角色卡（身份锁定：品种、体型比例、毛色、花纹、脸部细节一致）\n` +
+    (referencePhotoPath ? `- 第3张：宠物原始照片（细节加固：毛色、花纹、眼睛颜色）\n` : "") +
     `\n` +
     `【硬性一致性（必须满足）】\n` +
     `1) 视频里只出现 1 只宠物主角，且其外观必须与宠物参考图一致：品种、体型比例、毛色、花纹分布、脸部特征、耳朵形状、眼睛颜色、尾巴形态都要一致。\n` +
@@ -700,8 +702,8 @@ export async function generatePetVideo(
       const media: Array<{ type: string; url: string }> = [];
       if (isWanI2v(m)) return media;
       if (isKlingOmni(m)) {
-        media.push({ type: mediaType, url: cardInline });
         media.push({ type: mediaType, url: sceneInline });
+        media.push({ type: mediaType, url: cardInline });
         return media;
       }
       if (m === "happyhorse-1.0-r2v") {
@@ -736,7 +738,13 @@ export async function generatePetVideo(
           return isKlingOmni(model) ? 6 : 10;
         })(),
         resolution: "1080P",
-        size: "1080*1920",
+        size: (() => {
+          try {
+            const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE || "").trim();
+            if (v) return v;
+          } catch (e) {}
+          return isKlingOmni(model) ? "1920*1080" : "1080*1920";
+        })(),
         watermark: false,
       };
 

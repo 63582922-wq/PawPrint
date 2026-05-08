@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Sparkles, Wand2, Loader2, Play, Save, RefreshCcw, Image as ImageIcon, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetID, InteractionVideo } from '../types';
@@ -43,6 +43,32 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   const [characterCardPublicUrl, setCharacterCardPublicUrl] = useState<string>("");
   const [referencePhotoPublicUrl, setReferencePhotoPublicUrl] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const toVideoProxyUrl = useMemo(() => {
+    return (url: string, download?: boolean) => {
+      if (!url) return url;
+      if (url.startsWith("blob:") || url.startsWith("data:")) return url;
+      if (url.startsWith("/api/media/video")) {
+        if (!download) return url;
+        return url.includes("download=1") ? url : `${url}${url.includes("?") ? "&" : "?"}download=1`;
+      }
+      const base = `/api/media/video?url=${encodeURIComponent(url)}`;
+      return download ? `${base}&download=1` : base;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      el.setAttribute("playsinline", "true");
+      el.setAttribute("webkit-playsinline", "true");
+      el.setAttribute("x5-playsinline", "true");
+      el.setAttribute("x5-video-player-type", "h5");
+      el.setAttribute("x-webkit-airplay", "allow");
+    } catch (e) {}
+  }, [generatedResult]);
 
   if (!pet) {
     return (
@@ -145,7 +171,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         ? (referencePhotoPublicUrl.trim() || (pet.referencePhotoUrl || pet.avatarUrl || ""))
         : (pet.referencePhotoUrl || pet.avatarUrl || "");
 
-      const videoBlobUrl = await generatePetVideo(
+      const videoUrl = await generatePetVideo(
         cardForVideo,
         sceneForVideo,
         prompt,
@@ -153,7 +179,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
       );
       
       setInteractionStep('finalizing');
-      setGeneratedResult(videoBlobUrl);
+      setGeneratedResult(toVideoProxyUrl(videoUrl, false));
       setIsMuted(true);
     } catch (error: any) {
       console.error(error);
@@ -217,7 +243,14 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
       a.remove();
       return;
     }
-    window.open(generatedResult, "_blank", "noopener,noreferrer");
+    const dl = toVideoProxyUrl(generatedResult, true);
+    const a = document.createElement("a");
+    a.href = dl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   return (
@@ -423,6 +456,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                 muted={isMuted}
                 playsInline
                 controls
+                ref={videoRef}
                 className="h-full w-full object-cover"
               />
               {/* Cinematic Vignette */}
@@ -460,23 +494,13 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                     <Save size={18} />
                     {t.saveMemory}
                   </button>
-                  {showDevTools ? (
-                    <button
-                      onClick={downloadVideo}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
-                    >
-                      <Play size={18} fill="currentColor" />
-                      {t.downloadVideo}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => window.open(generatedResult, "_blank", "noopener,noreferrer")}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
-                    >
-                      <Play size={18} fill="currentColor" />
-                      {t.watchVideo || "Watch"}
-                    </button>
-                  )}
+                  <button
+                    onClick={downloadVideo}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
+                  >
+                    <Play size={18} fill="currentColor" />
+                    {t.downloadVideo}
+                  </button>
                 </div>
                 {showDevTools && (
                   <button

@@ -184,6 +184,7 @@ async function nanoBananaGenerateCharacterSheetUrl({
   referenceImageUrl,
   imageModel,
   imageSize,
+  aspectRatio,
 }) {
   const parts = [{ text: promptText }];
   if (referenceImageDataUrl) {
@@ -231,7 +232,7 @@ async function nanoBananaGenerateCharacterSheetUrl({
         contents: [{ role: "user", parts }],
         generationConfig: {
           responseModalities: ["IMAGE"],
-          imageConfig: { aspectRatio: "1:1", imageSize },
+          imageConfig: { aspectRatio: String(aspectRatio || "16:9"), imageSize },
         },
       }),
       signal: controller.signal,
@@ -309,6 +310,8 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
     const imageModel = String(req.body?.imageModel || "gemini-3.1-flash-image-preview").trim();
     const imageSizeRaw = String(req.body?.imageSize || "2K").trim();
     const imageSize = imageSizeRaw === "1K" || imageSizeRaw === "2K" ? imageSizeRaw : "2K";
+    const aspectRatioRaw = String(req.body?.aspectRatio || "16:9").trim();
+    const aspectRatio = aspectRatioRaw === "16:9" || aspectRatioRaw === "1:1" || aspectRatioRaw === "9:16" ? aspectRatioRaw : "16:9";
 
     if (!promptText) {
       res.status(400).json({ error: "missing_prompt" });
@@ -317,7 +320,7 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
 
     nanoBananaCleanupJobs();
     const asyncMode = String(req.query?.async || "") === "1";
-    const payload = { promptText, referenceImageDataUrl, referenceImageUrl, imageModel, imageSize };
+    const payload = { promptText, referenceImageDataUrl, referenceImageUrl, imageModel, imageSize, aspectRatio };
 
     if (asyncMode) {
       if (nanoBananaRunning >= NANO_BANANA_MAX_RUNNING) {
@@ -337,6 +340,95 @@ app.post("/api/nano-banana/generate-character-sheet", async (req, res) => {
   } catch (e) {
     const status = typeof e?.status === "number" ? e.status : 502;
     res.status(status).json({ error: "nano_banana_failed", message: String(e?.message || e) });
+  }
+});
+
+function isBlockedMediaHostname(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return true;
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (h === "0.0.0.0") return true;
+  if (h === "127.0.0.1") return true;
+  const isIpv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(h);
+  if (isIpv4) {
+    const parts = h.split(".").map((p) => Number(p));
+    if (parts.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
+}
+
+app.get("/api/media/video", async (req, res) => {
+  try {
+    const urlRaw = String(req.query?.url || "");
+    if (!urlRaw) {
+      res.status(400).json({ error: "missing_url" });
+      return;
+    }
+    let u;
+    try {
+      u = new URL(urlRaw);
+    } catch (e) {
+      res.status(400).json({ error: "invalid_url" });
+      return;
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      res.status(400).json({ error: "invalid_protocol" });
+      return;
+    }
+    if (isBlockedMediaHostname(u.hostname)) {
+      res.status(400).json({ error: "blocked_host" });
+      return;
+    }
+
+    const headers = {};
+    const range = req.headers["range"];
+    if (range) headers["range"] = Array.isArray(range) ? range.join(",") : String(range);
+    const ua = req.headers["user-agent"];
+    if (ua) headers["user-agent"] = Array.isArray(ua) ? ua.join(" ") : String(ua);
+    const accept = req.headers["accept"];
+    if (accept) headers["accept"] = Array.isArray(accept) ? accept.join(",") : String(accept);
+
+    const upstreamRes = await undiciFetch(u.toString(), {
+      method: "GET",
+      headers,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+
+    res.status(upstreamRes.status);
+    upstreamRes.headers.forEach((value, key) => {
+      const k = key.toLowerCase();
+      if (k === "transfer-encoding") return;
+      if (k === "content-encoding") return;
+      if (k === "connection") return;
+      res.setHeader(key, value);
+    });
+
+    res.setHeader("cache-control", "no-store");
+    const download = String(req.query?.download || "") === "1";
+    if (download) {
+      res.setHeader("content-disposition", `attachment; filename="pawprint-video.mp4"`);
+    }
+
+    if (upstreamRes.body) {
+      const nodeStream = Readable.fromWeb(upstreamRes.body);
+      nodeStream.on("error", () => {
+        try {
+          res.end();
+        } catch (e) {}
+      });
+      nodeStream.pipe(res);
+      return;
+    }
+    const ab = await upstreamRes.arrayBuffer();
+    res.end(Buffer.from(ab));
+  } catch (e) {
+    res.status(502).json({ error: "video_proxy_failed", message: String(e?.message || e) });
   }
 });
 
