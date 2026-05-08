@@ -520,6 +520,32 @@ export async function generatePetVideo(
     `请优先保证身份一致性与画质稳定，其次再追求动作表现。`;
 
   try {
+    const blobToDataUrl = (blob: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Failed to convert blob to data URL."));
+          reader.readAsDataURL(blob);
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+    const ensureDashscopeInlineImage = async (input: string, filenameBase: string) => {
+      if (!input) return input;
+      if (input.startsWith("data:")) {
+        return downscaleImageDataUrlIfNeeded(input, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
+      }
+      if (!/^https?:\/\//i.test(input)) return input;
+      if (typeof fetch === "undefined" || typeof Blob === "undefined" || typeof FileReader === "undefined") return input;
+      const r = await fetch(input);
+      if (!r.ok) throw new Error(`Failed to fetch media for DashScope: ${r.status}`);
+      const b = await r.blob();
+      const dataUrl = await blobToDataUrl(b);
+      return downscaleImageDataUrlIfNeeded(dataUrl, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
+    };
+
     const normalizedScene = scenePhotoPath.startsWith("data:")
       ? await downscaleImageDataUrlIfNeeded(scenePhotoPath, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 })
       : scenePhotoPath;
@@ -567,18 +593,23 @@ export async function generatePetVideo(
       }
     }
 
+    const preferInlineMedia = true;
+    const cardInline = preferInlineMedia ? await ensureDashscopeInlineImage(cardForVidu, "pawprint-card") : cardForVidu;
+    const refInline = refForVidu ? (preferInlineMedia ? await ensureDashscopeInlineImage(refForVidu, "pawprint-ref") : refForVidu) : undefined;
+    const sceneInline = preferInlineMedia ? await ensureDashscopeInlineImage(sceneForVidu, "pawprint-scene") : sceneForVidu;
+
     const buildMedia = (m: string) => {
       const mediaType = m === "happyhorse-1.0-r2v" ? "reference_image" : "image";
       const media: Array<{ type: string; url: string }> = [];
       if (isWanI2v(m)) return media;
       if (m === "happyhorse-1.0-r2v") {
-        const primaryRef = refForVidu || cardForVidu;
+        const primaryRef = refInline || cardInline;
         media.push({ type: mediaType, url: primaryRef });
         return media;
       }
-      media.push({ type: mediaType, url: cardForVidu });
-      if (refForVidu) media.push({ type: mediaType, url: refForVidu });
-      media.push({ type: mediaType, url: sceneForVidu });
+      media.push({ type: mediaType, url: cardInline });
+      if (refInline) media.push({ type: mediaType, url: refInline });
+      media.push({ type: mediaType, url: sceneInline });
       return media;
     };
 
@@ -604,7 +635,7 @@ export async function generatePetVideo(
       if (includeAudio) parameters.audio = true;
 
       if (isWanI2v(model)) {
-        const imgUrl = sceneForVidu;
+        const imgUrl = sceneInline;
         return {
           model,
           input: {
