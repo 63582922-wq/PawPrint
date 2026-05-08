@@ -50,11 +50,25 @@ app.get("/version", (_req, res) => {
 });
 
 app.get("/api/public-config", (_req, res) => {
+  const size = String(process.env.DASHSCOPE_VIDEO_SIZE || "");
+  const aspectRatio = (() => {
+    const v = String(process.env.DASHSCOPE_VIDEO_ASPECT_RATIO || "").trim();
+    if (v) return v;
+    const m = size.match(/^(\d+)\s*[*xX]\s*(\d+)$/);
+    if (!m) return "";
+    const w = Number(m[1]);
+    const h = Number(m[2]);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return "";
+    if (w === h) return "1:1";
+    if (w > h) return "16:9";
+    return "9:16";
+  })();
   res.json({
     video: {
       model: String(process.env.DASHSCOPE_VIDEO_MODEL || ""),
       mode: String(process.env.DASHSCOPE_VIDEO_MODE || ""),
-      size: String(process.env.DASHSCOPE_VIDEO_SIZE || ""),
+      aspectRatio,
+      size,
       durationSeconds: (() => {
         const v = Number(process.env.DASHSCOPE_VIDEO_DURATION_SECONDS);
         return Number.isFinite(v) && v > 0 ? v : undefined;

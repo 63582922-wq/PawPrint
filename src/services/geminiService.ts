@@ -467,6 +467,7 @@ function getDashscopeBaseUrl() {
 type PublicConfigVideo = {
   model?: string;
   mode?: string;
+  aspectRatio?: string;
   size?: string;
   durationSeconds?: number;
   enableAudio?: boolean;
@@ -498,6 +499,27 @@ function pickFirstNonEmptyString(...vals: Array<unknown>): string {
     if (s) return s;
   }
   return "";
+}
+
+function normalizeKlingModelId(modelId: string): string {
+  const s = String(modelId || "").trim();
+  if (!s) return "";
+  if (!/kling/i.test(s)) return s;
+  if (s.startsWith("kling/")) return s;
+  if (s.includes("/")) return s;
+  return `kling/${s}`;
+}
+
+function deriveAspectRatioFromSize(size: string): string {
+  const s = String(size || "").trim();
+  const m = s.match(/^(\d+)\s*[*xX]\s*(\d+)$/);
+  if (!m) return "";
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return "";
+  if (w === h) return "1:1";
+  if (w > h) return "16:9";
+  return "9:16";
 }
 
 const tempPublicImageCache = new Map<string, string>();
@@ -555,6 +577,8 @@ export async function generatePetVideo(
 
   const systemPrompt =
     `你是一个严格的写实导演与一致性审查员。请基于参考图片生成 1 段短视频。\n` +
+    `参考引用：<<<image_1>>>为场景参考；<<<image_2>>>为宠物角色卡参考；` +
+    (referencePhotoPath ? `<<<image_3>>>为宠物原始照片参考（可选）。\n` : `\n`) +
     `\n` +
     `【参考素材顺序（非常重要）】\n` +
     `- 第1张：场景环境（空间布局、主要物体、光照方向与色温、镜头视角）必须严格遵循\n` +
@@ -579,30 +603,13 @@ export async function generatePetVideo(
     `优先保证：场景不被改乱 + 身份一致性 + 画面稳定清晰。`;
 
   try {
-    const blobToDataUrl = (blob: Blob) =>
-      new Promise<string>((resolve, reject) => {
-        try {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ""));
-          reader.onerror = () => reject(new Error("Failed to convert blob to data URL."));
-          reader.readAsDataURL(blob);
-        } catch (e) {
-          reject(e);
-        }
-      });
-
-    const ensureDashscopeInlineImage = async (input: string, filenameBase: string) => {
+    const ensureKlingHttpImageUrl = async (input: string, filenameBase: string) => {
       if (!input) return input;
       if (input.startsWith("data:")) {
-        return downscaleImageDataUrlIfNeeded(input, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
+        const optimized = await downscaleImageDataUrlIfNeeded(input, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
+        return ensureTempPublicImageUrl(optimized, filenameBase);
       }
-      if (!/^https?:\/\//i.test(input)) return input;
-      if (typeof fetch === "undefined" || typeof Blob === "undefined" || typeof FileReader === "undefined") return input;
-      const r = await fetch(input);
-      if (!r.ok) throw new Error(`Failed to fetch media for DashScope: ${r.status}`);
-      const b = await r.blob();
-      const dataUrl = await blobToDataUrl(b);
-      return downscaleImageDataUrlIfNeeded(dataUrl, { maxDimension: 1280, jpegQuality: 0.85, maxBytes: 1_800_000 });
+      return input;
     };
 
     const model = (() => {
@@ -610,46 +617,24 @@ export async function generatePetVideo(
         const v = pickFirstNonEmptyString(publicConfig?.video?.model, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL);
         if (v) return v;
       } catch (e) {}
-      return "kling-v3-omni-video-generation";
+      return "kling/kling-v3-omni-video-generation";
     })();
+    const normalizedModel = normalizeKlingModelId(model);
 
-    const isKlingOmni = /kling/i.test(model);
+    const isKlingOmni = /kling/i.test(normalizedModel);
 
-    const cardInline = await ensureDashscopeInlineImage(characterCardPath, "pawprint-card");
-    const refInline = referencePhotoPath ? await ensureDashscopeInlineImage(referencePhotoPath, "pawprint-ref") : undefined;
-    const sceneInline = await ensureDashscopeInlineImage(scenePhotoPath, "pawprint-scene");
+    const cardUrl = await ensureKlingHttpImageUrl(characterCardPath, "pawprint-card");
+    const refUrl = referencePhotoPath ? await ensureKlingHttpImageUrl(referencePhotoPath, "pawprint-ref") : undefined;
+    const sceneUrl = await ensureKlingHttpImageUrl(scenePhotoPath, "pawprint-scene");
     const buildMedia = () => {
-      const mediaType = "image";
       const media: Array<{ type: string; url: string }> = [];
-      media.push({ type: mediaType, url: sceneInline });
-      media.push({ type: mediaType, url: cardInline });
-      if (refInline) media.push({ type: mediaType, url: refInline });
+      media.push({ type: "refer", url: sceneUrl });
+      media.push({ type: "refer", url: cardUrl });
+      if (refUrl) media.push({ type: "refer", url: refUrl });
       return media;
     };
 
     const buildPayload = (includeAudio: boolean) => {
-      const parameters: Record<string, any> = {
-        duration: (() => {
-          try {
-            const v =
-              typeof publicConfig?.video?.durationSeconds === "number"
-                ? publicConfig.video.durationSeconds
-                : Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
-            if (Number.isFinite(v) && v > 0) return v;
-          } catch (e) {}
-          return 6;
-        })(),
-        resolution: "1080P",
-        size: (() => {
-          try {
-            const v = pickFirstNonEmptyString(publicConfig?.video?.size, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE);
-            if (v) return v;
-          } catch (e) {}
-          return "1080*1920";
-        })(),
-        watermark: false,
-      };
-
       const wantAudio = (() => {
         try {
           if (typeof publicConfig?.video?.enableAudio === "boolean") return publicConfig.video.enableAudio;
@@ -660,7 +645,17 @@ export async function generatePetVideo(
         return includeAudio;
       })();
 
-      if (wantAudio) throw new Error("当前应用配置为无音频模式（enableAudio=false）。");
+      const durationSeconds = (() => {
+        try {
+          const v =
+            typeof publicConfig?.video?.durationSeconds === "number"
+              ? publicConfig.video.durationSeconds
+              : Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
+          if (Number.isFinite(v) && v > 0) return v;
+        } catch (e) {}
+        return 6;
+      })();
+
       const mode = (() => {
         try {
           const v = pickFirstNonEmptyString(publicConfig?.video?.mode, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE);
@@ -668,10 +663,35 @@ export async function generatePetVideo(
         } catch (e) {}
         return isKlingOmni ? "pro" : "";
       })();
-      if (mode) parameters.mode = mode;
+
+      const aspectRatio = (() => {
+        try {
+          const v = pickFirstNonEmptyString(
+            publicConfig?.video?.aspectRatio,
+            (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_ASPECT_RATIO
+          );
+          if (v) return v;
+        } catch (e) {}
+        const legacySize = (() => {
+          try {
+            return pickFirstNonEmptyString(publicConfig?.video?.size, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE);
+          } catch (e) {
+            return "";
+          }
+        })();
+        return deriveAspectRatioFromSize(legacySize) || "9:16";
+      })();
+
+      const parameters: Record<string, any> = {
+        ...(mode ? { mode } : {}),
+        duration: durationSeconds,
+        audio: !!wantAudio,
+        aspect_ratio: aspectRatio,
+        watermark: false,
+      };
 
       return {
-        model,
+        model: normalizedModel,
         input: {
           prompt: systemPrompt,
           media: buildMedia(),
@@ -694,7 +714,7 @@ export async function generatePetVideo(
       });
       if (!createRes.ok) {
         const errText = await createRes.text();
-        throw new Error(`Failed to create video task (model=${model}): ${errText}`);
+        throw new Error(`Failed to create video task (model=${normalizedModel}): ${errText}`);
       }
       return createRes.json();
     };
