@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Sparkles, Wand2, Loader2, Play, Save, RefreshCcw, Image as ImageIcon, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetID, InteractionVideo } from '../types';
-import { describeSceneImage, ensureTempPublicImageUrl, generateInteractivePrompt, generatePetVideo, sanitizeVideoPromptText, setDashscopeApiKey } from '../services/geminiService';
+import { compileVideoUserIntentToPrompt, describeSceneImage, ensureTempPublicImageUrl, generateInteractivePrompt, generatePetVideo, sanitizeVideoPromptText, setDashscopeApiKey } from '../services/geminiService';
 import { cn } from '../lib/utils';
 
 declare global {
@@ -158,6 +158,8 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
           if (generated) prompt = sanitizeVideoPromptText(generated);
         } catch (e) {}
       }
+
+      prompt = compileVideoUserIntentToPrompt(prompt);
       
       console.log("Generating with prompt:", prompt);
       setInteractionStep('rendering');

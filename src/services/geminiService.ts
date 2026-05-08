@@ -405,6 +405,22 @@ export function sanitizeVideoPromptText(text: string) {
     .trim();
 }
 
+export function compileVideoUserIntentToPrompt(intent: string) {
+  const cleaned = sanitizeVideoPromptText(String(intent || "")).replace(/\s+/g, " ").trim();
+  const sentences = cleaned
+    .split(/[\n。！？!?]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const core = (sentences.slice(0, 2).join("，") || "宠物在镜头前方自然互动").trim();
+
+  return [
+    "第一视角手机镜头，机位与视角必须严格保持在场景图所示范围内。",
+    "镜头不得转向到场景图之外（不允许突然换角度/跳切/环绕/俯拍/反打等新视角）。",
+    `在不改变场景布局与光照的前提下：${core}。`,
+    "动作尽量发生在镜头前方小范围内，镜头稳定为主，只允许非常轻微平滑移动或轻微手持感。",
+  ].join("\n");
+}
+
 const DASHSCOPE_KEY_STORAGE = "pawprint_dashscope_api_key";
 
 export function setDashscopeApiKey(key: string) {
@@ -513,6 +529,7 @@ export async function generatePetVideo(
     `\n` +
     `【镜头与叙事（关键）】\n` +
     `- 这是手机拍摄的第一视角：镜头在拍摄者眼高附近，轻微手持感，稳定为主。\n` +
+    `- 镜头角度必须严格保持在场景图的视角范围内，不允许转向到场景图之外；不允许切换到新的视角（俯拍/仰拍/侧面/反打/环绕）。\n` +
     `- 不要写复杂分镜，不要大幅改造空间；避免“新增不存在的家具/道具/窗景/光源”。\n` +
     `- 优先做“镜头内互动”：宠物靠近镜头、注视镜头、嗅闻镜头前方、在镜头附近小范围活动。\n` +
     `\n` +
