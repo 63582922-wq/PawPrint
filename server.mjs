@@ -49,6 +49,27 @@ app.get("/version", (_req, res) => {
   });
 });
 
+app.get("/api/public-config", (_req, res) => {
+  res.json({
+    video: {
+      model: String(process.env.DASHSCOPE_VIDEO_MODEL || ""),
+      mode: String(process.env.DASHSCOPE_VIDEO_MODE || ""),
+      size: String(process.env.DASHSCOPE_VIDEO_SIZE || ""),
+      durationSeconds: (() => {
+        const v = Number(process.env.DASHSCOPE_VIDEO_DURATION_SECONDS);
+        return Number.isFinite(v) && v > 0 ? v : undefined;
+      })(),
+      enableAudio: (() => {
+        const v = String(process.env.DASHSCOPE_VIDEO_ENABLE_AUDIO || "").trim().toLowerCase();
+        if (!v) return undefined;
+        if (v === "true") return true;
+        if (v === "false") return false;
+        return undefined;
+      })(),
+    },
+  });
+});
+
 app.use(express.json({ limit: "15mb" }));
 
 const uploadsDir = path.join(__dirname, "uploads");
@@ -439,7 +460,27 @@ app.use("/api/dashscope", async (req, res) => {
       return;
     }
 
-    const upstreamUrl = `https://dashscope.aliyuncs.com${req.originalUrl.replace(/^\/api\/dashscope/, "")}`;
+    const forwardedPath = String(req.originalUrl || "").replace(/^\/api\/dashscope/, "");
+    if (
+      req.method &&
+      String(req.method).toUpperCase() === "POST" &&
+      forwardedPath.startsWith("/api/v1/services/aigc/video-generation/video-synthesis")
+    ) {
+      const model = String(req.body?.model || "").trim();
+      if (!model) {
+        res.status(400).json({ error: "missing_model", message: "DashScope video request requires a model id." });
+        return;
+      }
+      if (!/kling/i.test(model)) {
+        res.status(400).json({
+          error: "non_kling_model_blocked",
+          message: `Only Kling video models are allowed by this app. Got model=${model}`,
+        });
+        return;
+      }
+    }
+
+    const upstreamUrl = `https://dashscope.aliyuncs.com${forwardedPath}`;
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
       if (!v) continue;

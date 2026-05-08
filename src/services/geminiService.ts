@@ -464,6 +464,42 @@ function getDashscopeBaseUrl() {
   return "/api/dashscope";
 }
 
+type PublicConfigVideo = {
+  model?: string;
+  mode?: string;
+  size?: string;
+  durationSeconds?: number;
+  enableAudio?: boolean;
+};
+
+type PublicConfig = {
+  video?: PublicConfigVideo;
+};
+
+let publicConfigPromise: Promise<PublicConfig> | null = null;
+
+async function getPublicConfig(): Promise<PublicConfig> {
+  if (publicConfigPromise) return publicConfigPromise;
+  publicConfigPromise = (async () => {
+    try {
+      const res = await fetch("/api/public-config", { method: "GET" });
+      if (!res.ok) return {};
+      return (await res.json()) as PublicConfig;
+    } catch (e) {
+      return {};
+    }
+  })();
+  return publicConfigPromise;
+}
+
+function pickFirstNonEmptyString(...vals: Array<unknown>): string {
+  for (const v of vals) {
+    const s = String(v ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
 const tempPublicImageCache = new Map<string, string>();
 
 export async function uploadDataUrlToTempPublicUrl(dataUrl: string, filenameBase: string): Promise<string> {
@@ -503,6 +539,7 @@ export async function generatePetVideo(
   referencePhotoPath?: string
 ) {
   const dashscopeApiKey = getDashscopeApiKey();
+  const publicConfig = await getPublicConfig();
   let isProd = false;
   try {
     isProd = !!(import.meta as any)?.env?.PROD;
@@ -570,18 +607,13 @@ export async function generatePetVideo(
 
     const model = (() => {
       try {
-        const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL || "").trim();
+        const v = pickFirstNonEmptyString(publicConfig?.video?.model, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODEL);
         if (v) return v;
       } catch (e) {}
       return "kling-v3-omni-video-generation";
     })();
 
     const isKlingOmni = /kling/i.test(model);
-    if (!isKlingOmni) {
-      throw new Error(
-        `当前仅支持 Kling Omni 多图参考视频模型。请把 VITE_DASHSCOPE_VIDEO_MODEL 设置为 kling-v3-omni-video-generation（当前：${model}）。`
-      );
-    }
 
     const cardInline = await ensureDashscopeInlineImage(characterCardPath, "pawprint-card");
     const refInline = referencePhotoPath ? await ensureDashscopeInlineImage(referencePhotoPath, "pawprint-ref") : undefined;
@@ -599,7 +631,10 @@ export async function generatePetVideo(
       const parameters: Record<string, any> = {
         duration: (() => {
           try {
-            const v = Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
+            const v =
+              typeof publicConfig?.video?.durationSeconds === "number"
+                ? publicConfig.video.durationSeconds
+                : Number((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_DURATION_SECONDS);
             if (Number.isFinite(v) && v > 0) return v;
           } catch (e) {}
           return 6;
@@ -607,7 +642,7 @@ export async function generatePetVideo(
         resolution: "1080P",
         size: (() => {
           try {
-            const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE || "").trim();
+            const v = pickFirstNonEmptyString(publicConfig?.video?.size, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_SIZE);
             if (v) return v;
           } catch (e) {}
           return "1080*1920";
@@ -617,6 +652,7 @@ export async function generatePetVideo(
 
       const wantAudio = (() => {
         try {
+          if (typeof publicConfig?.video?.enableAudio === "boolean") return publicConfig.video.enableAudio;
           const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_ENABLE_AUDIO || "").trim();
           if (v === "true") return true;
           if (v === "false") return false;
@@ -624,17 +660,15 @@ export async function generatePetVideo(
         return includeAudio;
       })();
 
-      if (wantAudio) {
-        throw new Error("Kling Omni 当前配置为无音频模式。如需音频请启用其他支持音频的模型。");
-      }
+      if (wantAudio) throw new Error("当前应用配置为无音频模式（enableAudio=false）。");
       const mode = (() => {
         try {
-          const v = String((import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE || "").trim().toLowerCase();
-          if (v) return v;
+          const v = pickFirstNonEmptyString(publicConfig?.video?.mode, (import.meta as any)?.env?.VITE_DASHSCOPE_VIDEO_MODE);
+          if (v) return String(v).trim().toLowerCase();
         } catch (e) {}
-        return "pro";
+        return isKlingOmni ? "pro" : "";
       })();
-      parameters.mode = mode;
+      if (mode) parameters.mode = mode;
 
       return {
         model,
@@ -660,7 +694,7 @@ export async function generatePetVideo(
       });
       if (!createRes.ok) {
         const errText = await createRes.text();
-        throw new Error(`Failed to create video task: ${errText}`);
+        throw new Error(`Failed to create video task (model=${model}): ${errText}`);
       }
       return createRes.json();
     };
