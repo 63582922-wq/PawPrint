@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Trash2, Globe, Info, Shield, ChevronRight } from 'lucide-react';
+import { X, Trash2, Globe, Info, Shield, ChevronRight, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Language } from '../lib/i18n';
 
