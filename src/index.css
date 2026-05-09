@@ -1,9 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=ZCOOL+KuaiLe&display=swap');
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=ZCOOL+KuaiLe&family=Inter:wght@400;700&display=swap');
 
 @theme {
-  --font-sans: "Comfortaa", "ZCOOL KuaiLe", "Quicksand", "Arial Rounded MT Bold", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "STHeiti", sans-serif;
-  --font-display: "Comfortaa", "ZCOOL KuaiLe", cursive;
+  --font-sans: "Comfortaa", "ZCOOL KuaiLe", "STYuanti-SC-Regular", "Yuanti SC", "YouYuan", "幼圆", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Comfortaa", "ZCOOL KuaiLe", "STYuanti-SC-Regular", "Yuanti SC", cursive;
 
   /* Organic Design System Tokens */
   --color-brand-warm-white: #FDFCF8;
