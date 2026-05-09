@@ -27,7 +27,7 @@ import SettingsModal from './components/SettingsModal';
 import Onboarding from './components/Onboarding';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'id' | 'interact' | 'memories' | 'scan'>('scan');
+  const [activeTab, setActiveTab] = useState<'home' | 'interact' | 'memories'>('home');
   const [petID, setPetID] = useState<PetID | null>(null);
   const [interactions, setInteractions] = useState<InteractionVideo[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -81,15 +81,15 @@ export default function App() {
     if (savedPet) {
       try {
         setPetID(JSON.parse(savedPet));
-        setActiveTab('id');
+        setActiveTab('home');
       } catch (e) {
         try {
           localStorage.removeItem("pawprint_pet");
         } catch (e2) {}
-        setActiveTab('scan');
+        setActiveTab('home');
       }
     } else {
-      setActiveTab('scan');
+      setActiveTab('home');
     }
     
     if (savedInteractions) {
@@ -119,7 +119,7 @@ export default function App() {
   const handlePetCreated = (newPet: PetID) => {
     setPetID(newPet);
     safeSetLocalStorage('pawprint_pet', JSON.stringify(newPet));
-    setActiveTab('id');
+    setActiveTab('home');
   };
 
   const handlePetUpdated = (updatedPet: PetID) => {
@@ -145,7 +145,7 @@ export default function App() {
     localStorage.removeItem('pawprint_interactions');
     setPetID(null);
     setInteractions([]);
-    setActiveTab('scan');
+    setActiveTab('home');
     setIsSettingsOpen(false);
   };
 
@@ -156,11 +156,11 @@ export default function App() {
 
   if (isInitializing) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-screen items-center justify-center bg-[var(--color-brand-warm-white)]">
         <motion.div
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ repeat: Infinity, duration: 2 }}
-          className="text-orange-500"
+          className="text-[var(--color-brand-forest)]"
         >
           <Heart size={48} fill="currentColor" />
         </motion.div>
@@ -169,34 +169,30 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900 overflow-x-hidden font-sans">
+    <div className="flex min-h-screen flex-col bg-[var(--color-brand-warm-white)] text-[var(--color-brand-stone)] overflow-x-hidden font-sans">
       {/* Onboarding */}
       <AnimatePresence>
         {showOnboarding && <Onboarding t={t} onComplete={handleOnboardingComplete} />}
       </AnimatePresence>
 
       {/* Header */}
-      <header className="sticky top-0 z-10 flex items-center justify-between bg-white/80 p-4 backdrop-blur-md">
+      <header className="sticky top-0 z-10 flex items-center justify-between bg-[var(--color-brand-warm-white)]/80 p-4 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <div className="rounded-xl bg-orange-500 p-1.5 text-white shadow-lg shadow-orange-500/20">
+          <div className="rounded-xl bg-[var(--color-brand-forest)] p-1.5 text-white shadow-bloom">
             <Heart size={20} fill="currentColor" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">{t.appName}</h1>
-          <div className="ml-2 hidden items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-600 ring-1 ring-green-100 md:flex">
-            <div className="h-1 w-1 rounded-full bg-green-500 animate-pulse" />
-            AUTHORIZED
-          </div>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--color-brand-forest)]">{t.appName}</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
             onClick={toggleLang}
-            className="rounded-full bg-gray-100 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-200"
+            className="rounded-full bg-[var(--color-brand-sand)] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[var(--color-brand-forest)] hover:bg-[var(--color-brand-sand)]/80"
           >
             {lang === 'en' ? '中文' : 'EN'}
           </button>
           <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="rounded-full p-2 text-gray-400 hover:bg-gray-100"
+            className="rounded-full p-2 text-[var(--color-brand-stone)]/40 hover:bg-[var(--color-brand-sand)]"
           >
             <SettingsIcon size={24} />
           </button>
@@ -219,45 +215,18 @@ export default function App() {
       {/* Main Content */}
       <main className="relative flex-1 pb-24">
         <AnimatePresence mode="wait">
-          {activeTab === 'scan' && (
+          {activeTab === 'home' && (
             <motion.div
-              key="scan"
+              key="home"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className="px-4 py-6"
             >
-              <PetScanner onComplete={handlePetCreated} t={t} />
-            </motion.div>
-          )}
-
-          {activeTab === 'id' && (
-            <motion.div
-              key="id"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="px-4 py-6"
-            >
               {petID ? (
-                <PetIDCard pet={petID} onReset={() => setActiveTab('scan')} onUpdate={handlePetUpdated} t={t} />
+                <PetIDCard pet={petID} onReset={() => setPetID(null)} onUpdate={handlePetUpdated} t={t} />
               ) : (
-                <div className="flex flex-col items-center justify-center pt-20 text-center">
-                  <div className="mb-6 rounded-3xl bg-orange-100 p-8 text-orange-600">
-                    <Scan size={64} />
-                  </div>
-                  <h2 className="mb-2 text-2xl font-bold">{t.noPetTitle}</h2>
-                  <p className="mb-8 max-w-xs text-gray-500">
-                    {t.noPetDesc}
-                  </p>
-                  <button
-                    onClick={() => setActiveTab('scan')}
-                    className="flex items-center gap-2 rounded-full bg-orange-500 px-8 py-4 font-bold text-white shadow-xl shadow-orange-500/25 transition-transform active:scale-95"
-                  >
-                    <Plus size={20} strokeWidth={3} />
-                    {t.createPetId}
-                  </button>
-                </div>
+                <PetScanner onComplete={handlePetCreated} t={t} />
               )}
             </motion.div>
           )}
@@ -289,26 +258,20 @@ export default function App() {
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-gray-100 bg-white/90 p-4 pb-8 backdrop-blur-lg">
-        <div className="mx-auto flex max-w-sm justify-between">
+      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--color-brand-sand)] bg-[var(--color-brand-warm-white)]/90 p-4 pb-8 backdrop-blur-lg">
+        <div className="mx-auto flex max-w-sm justify-around">
           <NavButton 
-            active={activeTab === 'id'} 
-            onClick={() => setActiveTab('id')}
+            active={activeTab === 'home'} 
+            onClick={() => setActiveTab('home')}
             icon={<IdCard size={24} />}
             label={t.petId}
-          />
-          <NavButton 
-            active={activeTab === 'scan'} 
-            onClick={() => setActiveTab('scan')}
-            icon={<Plus size={24} />}
-            label={t.scan}
-            primary
           />
           <NavButton 
             active={activeTab === 'interact'} 
             onClick={() => setActiveTab('interact')}
             icon={<Camera size={24} />}
             label={t.interact}
+            primary
           />
           <NavButton 
             active={activeTab === 'memories'} 
@@ -340,7 +303,7 @@ function NavButton({
       <button 
         onClick={onClick}
         className={cn(
-          "relative -top-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-xl shadow-orange-500/30 transition-all",
+          "relative -top-8 flex h-16 w-16 items-center justify-center rounded-3xl bg-[var(--color-brand-forest)] text-white shadow-bloom transition-all",
           active ? "scale-110 rotate-0" : "hover:scale-105"
         )}
       >
@@ -354,20 +317,20 @@ function NavButton({
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1 transition-colors",
-        active ? "text-orange-500" : "text-gray-400 hover:text-gray-600"
+        active ? "text-[var(--color-brand-forest)]" : "text-[var(--color-brand-stone)]/40 hover:text-[var(--color-brand-stone)]/60"
       )}
     >
       <div className={cn(
-        "rounded-xl p-1",
-        active && "bg-orange-50"
+        "rounded-2xl p-1",
+        active && "bg-[var(--color-brand-sand)]"
       )}>
         {icon}
       </div>
-      <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
       {active && (
         <motion.div 
           layoutId="nav-dot"
-          className="h-1 w-1 rounded-full bg-orange-500"
+          className="h-1 w-1 rounded-full bg-[var(--color-brand-forest)]"
         />
       )}
     </button>

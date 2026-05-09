@@ -41,26 +41,29 @@ export default function SettingsModal({ t, onClose, onReset, lang, toggleLang }:
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col bg-white"
+      className="fixed inset-0 z-50 flex flex-col bg-[var(--color-brand-warm-white)]"
     >
-      <header className="flex items-center justify-between p-4 border-b border-gray-100">
-        <h2 className="text-xl font-bold">{t.settings}</h2>
-        <button onClick={onClose} className="rounded-full p-2 text-gray-400 hover:bg-gray-100">
+      <header className="flex items-center justify-between p-6 bg-white/80 backdrop-blur-md sticky top-0 z-10">
+        <h2 className="text-2xl font-black tracking-tight text-[var(--color-brand-forest)]">{t.settings}</h2>
+        <button onClick={onClose} className="rounded-full bg-[var(--color-brand-sand)] p-2 text-[var(--color-brand-stone)]/40">
           <X size={24} />
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-8">
+      <div className="flex-1 overflow-y-auto p-6 space-y-10">
         {/* Profile Section */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">{t.about}</h3>
-          <div className="rounded-3xl bg-gray-50 p-6 flex flex-col items-center text-center">
-             <div className="h-16 w-16 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 mb-4">
-                <Info size={32} />
+          <h3 className="px-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/40">{t.about}</h3>
+          <div className="rounded-[var(--radius-3xl)] bg-white p-8 flex flex-col items-center text-center shadow-soft ring-1 ring-[var(--color-brand-sand)] relative overflow-hidden">
+             <div className="absolute -right-4 -top-4 opacity-5">
+               <Heart size={120} fill="var(--color-brand-forest)" />
              </div>
-             <h4 className="font-bold text-lg">{t.appName}</h4>
-             <p className="text-sm text-gray-500 mt-1">{t.appDescription}</p>
-             <div className="mt-4 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-gray-400 ring-1 ring-gray-100 uppercase">
+             <div className="h-20 w-20 rounded-[var(--radius-2xl)] bg-[var(--color-brand-forest)] text-white flex items-center justify-center shadow-bloom mb-6">
+                <Info size={40} strokeWidth={1.5} />
+             </div>
+             <h4 className="font-black text-xl text-[var(--color-brand-forest)]">{t.appName}</h4>
+             <p className="text-sm text-[var(--color-brand-stone)]/60 mt-2">{t.appDescription}</p>
+             <div className="mt-6 rounded-full bg-[var(--color-brand-sand)] px-4 py-1.5 text-[10px] font-black text-[var(--color-brand-forest)]/40 uppercase tracking-widest">
                 {t.version}: {commit ? commit.slice(0, 7) : "1.2.0-STABLE"}
              </div>
           </div>
@@ -68,8 +71,8 @@ export default function SettingsModal({ t, onClose, onReset, lang, toggleLang }:
 
         {/* Preferences Section */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">{t.settings}</h3>
-          <div className="space-y-1 overflow-hidden rounded-3xl ring-1 ring-gray-100">
+          <h3 className="px-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/40">{t.settings}</h3>
+          <div className="overflow-hidden rounded-[var(--radius-3xl)] bg-white shadow-soft ring-1 ring-[var(--color-brand-sand)]">
             <SettingRow 
               icon={<Globe size={20} />}
               label={lang === 'en' ? 'Language / 语言' : '语言 / Language'}
@@ -94,27 +97,27 @@ export default function SettingsModal({ t, onClose, onReset, lang, toggleLang }:
 
         {/* Danger Zone */}
         <section className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-red-400">Danger Zone</h3>
+          <h3 className="px-2 text-[10px] font-black uppercase tracking-[0.2em] text-red-400/60">Danger Zone</h3>
           <button 
             onClick={handleClearData}
-            className="flex w-full items-center gap-4 rounded-3xl bg-red-50 p-4 text-red-600 transition-transform active:scale-[0.98]"
+            className="flex w-full items-center gap-5 rounded-[var(--radius-3xl)] bg-red-50 p-6 text-red-600 transition-all active:scale-[0.98] ring-1 ring-red-100 shadow-sm"
           >
-            <div className="rounded-xl bg-red-100 p-2">
-              <Trash2 size={20} />
+            <div className="rounded-2xl bg-red-100 p-3">
+              <Trash2 size={24} />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-bold text-sm">{t.clearData}</p>
-              <p className="text-[10px] opacity-60">Permanently delete pet ID and interaction memories</p>
+              <p className="font-black text-sm uppercase tracking-tight">{t.clearData}</p>
+              <p className="text-xs opacity-60 mt-0.5">Permanently delete pet ID and memories</p>
             </div>
-            <ChevronRight size={16} className="opacity-40" />
+            <ChevronRight size={16} className="opacity-30" />
           </button>
         </section>
       </div>
 
-      <footer className="p-8 text-center">
+      <footer className="p-8 text-center bg-white/50 backdrop-blur-md border-t border-[var(--color-brand-sand)]">
         <button 
           onClick={onClose}
-          className="w-full rounded-2xl bg-gray-900 py-4 font-bold text-white shadow-xl shadow-gray-900/20 active:scale-95 transition-transform"
+          className="w-full rounded-[var(--radius-3xl)] bg-[var(--color-brand-forest)] py-5 font-black text-white shadow-bloom active:scale-95 transition-transform text-lg"
         >
           {t.close}
         </button>
@@ -132,12 +135,12 @@ function SettingRow({ icon, label, value, onClick }: {
   return (
     <button 
       onClick={onClick}
-      className="flex w-full items-center gap-4 bg-white p-4 transition-colors hover:bg-gray-50 active:bg-gray-100"
+      className="flex w-full items-center gap-5 bg-white p-5 transition-colors hover:bg-[var(--color-brand-sand)] active:bg-[var(--color-brand-sand)] border-b last:border-none border-[var(--color-brand-sand)]"
     >
-      <div className="text-gray-400">{icon}</div>
-      <div className="flex-1 text-left font-medium text-sm text-gray-700">{label}</div>
-      {value && <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded-lg">{value}</span>}
-      <ChevronRight size={16} className="text-gray-300" />
+      <div className="text-[var(--color-brand-forest)]/40">{icon}</div>
+      <div className="flex-1 text-left font-bold text-sm text-[var(--color-brand-stone)]">{label}</div>
+      {value && <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-brand-forest)] bg-[var(--color-brand-sand)] px-3 py-1.5 rounded-full">{value}</span>}
+      <ChevronRight size={16} className="text-[var(--color-brand-stone)]/20" />
     </button>
   );
 }

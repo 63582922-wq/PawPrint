@@ -122,7 +122,9 @@ export const translations = {
     onboardingStep3Desc: "Capture any scene, and our AI will render your pet interacting with the real environment.",
     getStarted: "Get Started",
     nextStep: "Next Step",
-    skip: "Skip"
+    skip: "Skip",
+    creationSuccess: "Digital Soul Created!",
+    goInteract: "Go Play with {name}",
   },
   zh: {
     appName: "爪印 AI",
@@ -244,6 +246,8 @@ export const translations = {
     onboardingStep3Desc: "拍摄任何场景，我们的 AI 将渲染您的宠物与真实环境的互动场景。",
     getStarted: "开启体验",
     nextStep: "下一步",
-    skip: "跳过"
+    skip: "跳过",
+    creationSuccess: "数字灵魂已降临！",
+    goInteract: "带 {name} 去玩耍",
   }
 };

@@ -95,7 +95,6 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
     } else {
       try {
         await navigator.clipboard.writeText(window.location.href);
-        alert(t.linkCopied || "Link copied.");
       } catch (e) {
         alert(window.location.href);
       }
@@ -126,30 +125,31 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
       const newUrl = await generateCharacterSheet(String(prompt || ""), String(ref || ""));
       onUpdate({ ...pet, characterSheetUrl: newUrl });
     } catch (e) {
-      alert(t.generationError ? `${t.generationError}${String((e as any)?.message || e)}` : String((e as any)?.message || e));
+      console.error("Regenerate failed", e);
     } finally {
       setIsRegenerating(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Actual ID Card Design */}
-      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-800 p-6 text-white shadow-2xl">
-        {/* Holographic effect overlay */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/5" />
+      <div className="relative overflow-hidden rounded-[var(--radius-3xl)] bg-[var(--color-brand-forest)] p-8 text-white shadow-bloom">
+        <div className="absolute -right-8 -top-8 opacity-10">
+          <Heart size={160} fill="currentColor" />
+        </div>
         
-        <div className="relative flex justify-between gap-4">
-          <div className="flex-1 space-y-4">
-            <div>
-              <div className="flex items-center gap-1.5 opacity-60">
+        <div className="relative flex justify-between gap-6">
+          <div className="flex-1 space-y-6">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 opacity-60">
                 <ShieldCheck size={14} />
                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">{t.identityCard}</span>
               </div>
               <h2 className="text-4xl font-black italic tracking-tighter uppercase">{pet.name}</h2>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
               <InfoItem label={t.breed} value={pet.breed} />
               <InfoItem label={t.idNumber} value={pet.id.toUpperCase()} />
               <InfoItem
@@ -163,12 +163,11 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
                 }
               />
               <InfoItem label={t.birthDate} value={pet.birthday || "—"} />
-              <InfoItem label={t.issueDate} value={new Date(pet.createdAt).toLocaleDateString()} />
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2 pt-2">
               {pet.characteristics.slice(0, 3).map((tag, i) => (
-                <span key={i} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                <span key={i} className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider backdrop-blur-md ring-1 ring-white/10">
                   {tag}
                 </span>
               ))}
@@ -176,38 +175,40 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
           </div>
 
           <div className="relative shrink-0">
-            <div className="h-28 w-28 overflow-hidden rounded-2xl border-2 border-white/20 bg-white/5 backdrop-blur-md">
+            <div className="h-32 w-32 overflow-hidden rounded-2xl border-4 border-white/20 bg-white/5 backdrop-blur-md shadow-2xl">
               <img 
                 src={pet.avatarUrl || pet.characterSheetUrl} 
                 alt={pet.name} 
                 className="h-full w-full object-cover"
               />
             </div>
-            <div className="absolute -bottom-2 -right-2 rounded-lg bg-orange-500 p-1.5 text-white shadow-lg">
-              <Fingerprint size={16} />
+            <div className="absolute -bottom-3 -right-3 rounded-2xl bg-[var(--color-brand-clay)] p-2 text-white shadow-bloom">
+              <Fingerprint size={20} />
             </div>
           </div>
         </div>
       </div>
 
       {/* Immersive Interaction Section */}
-      <div className="rounded-3xl bg-orange-50 p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
-            <div className="h-10 w-10 rounded-full border-2 border-white overflow-hidden bg-white">
-              <img src={pet.avatarUrl || pet.characterSheetUrl} alt="Pet" className="h-full w-full object-cover" />
+      <div className="rounded-[var(--radius-3xl)] bg-[var(--color-brand-sand)] p-6 space-y-6 shadow-soft ring-1 ring-[var(--color-brand-stone)]/5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-3">
+              <div className="h-10 w-10 rounded-full border-2 border-white overflow-hidden bg-white shadow-sm">
+                <img src={pet.avatarUrl || pet.characterSheetUrl} alt="Pet" className="h-full w-full object-cover" />
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[var(--color-brand-forest)] text-white text-[10px] font-black shadow-sm">
+                AI
+              </div>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-blue-500 text-white text-xs font-bold">
-              AI
+            <div className="space-y-0.5">
+              <h3 className="text-sm font-black uppercase tracking-widest text-[var(--color-brand-forest)]">{t.telepathyMode}</h3>
+              <p className="text-[10px] text-[var(--color-brand-stone)]/40 font-bold uppercase tracking-wider">{t.connectedSoul.replace('{name}', pet.name)}</p>
             </div>
-          </div>
-          <div>
-            <h3 className="text-sm font-bold">{t.telepathyMode}</h3>
-            <p className="text-xs text-gray-500">{t.connectedSoul.replace('{name}', pet.name)}</p>
           </div>
         </div>
         
-        <div className="rounded-2xl bg-white p-4 shadow-sm italic text-sm text-gray-700 leading-relaxed min-h-[60px] flex items-center">
+        <div className="rounded-2xl bg-white p-5 shadow-soft italic text-sm text-[var(--color-brand-stone)] leading-relaxed min-h-[80px] flex items-center ring-1 ring-[var(--color-brand-stone)]/5">
           <AnimatePresence mode="wait">
             {isTyping ? (
               <motion.div 
@@ -215,11 +216,11 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex gap-1"
+                className="flex gap-1.5"
               >
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:0.2s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:0.4s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-brand-forest)]/20" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-brand-forest)]/20 [animation-delay:0.2s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-brand-forest)]/20 [animation-delay:0.4s]" />
               </motion.div>
             ) : (
               <motion.p
@@ -234,60 +235,45 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
           </AnimatePresence>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-3">
            <input 
              value={chatMessage}
              onChange={(e) => setChatMessage(e.target.value)}
              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
              placeholder={t.talkToPet.replace('{name}', pet.name)}
-             className="flex-1 rounded-xl border-none bg-white p-3 text-xs shadow-sm ring-1 ring-gray-100 focus:ring-2 focus:ring-orange-500"
+             className="flex-1 rounded-2xl border-none bg-white p-4 text-sm font-medium shadow-soft ring-1 ring-[var(--color-brand-stone)]/5 focus:ring-2 focus:ring-[var(--color-brand-forest)]/10 placeholder:text-[var(--color-brand-stone)]/20"
            />
            <button 
              onClick={handleSend}
              disabled={isTyping}
-             className="rounded-xl bg-orange-500 px-4 py-2 text-white shadow-lg disabled:opacity-50 transition-transform active:scale-90"
+             className="rounded-2xl bg-[var(--color-brand-forest)] px-5 text-white shadow-bloom disabled:opacity-50 transition-transform active:scale-90"
            >
-             {isTyping ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+             {isTyping ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
            </button>
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <button
-          onClick={handleRegenerateCharacterSheet}
-          disabled={isRegenerating}
-          className={cn(
-            "flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-gray-900 shadow-sm ring-1 ring-gray-100 transition-all active:scale-[0.98]",
-            isRegenerating ? "opacity-70 cursor-not-allowed" : "hover:bg-gray-50"
-          )}
-        >
-          {isRegenerating ? (t.regeneratingCard || "Regenerating...") : (t.regenerateCard || "Regenerate Character Sheet")}
-        </button>
-      </div>
-
       {/* Grid Display */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">{t.referenceGrid || "Character Sheet"}</h3>
-          <span className="text-[10px] font-medium text-gray-400">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/40">{t.referenceGrid || "Character Sheet"}</h3>
+          <span className="text-[10px] font-black text-[var(--color-brand-stone)]/20 uppercase tracking-widest">
             {characterSheetSize ? `${characterSheetSize.w}×${characterSheetSize.h}` : t.scanCompleted}
           </span>
         </div>
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-gray-200 shadow-inner">
+        <div className="relative aspect-square w-full overflow-hidden rounded-[var(--radius-3xl)] bg-[var(--color-brand-sand)] shadow-bloom ring-8 ring-white">
           <AnimatePresence>
             {isRegenerating && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-sm"
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/60 backdrop-blur-md"
               >
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 size={32} className="animate-spin text-orange-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">
-                    {t.regeneratingCard}
-                  </span>
-                </div>
+                <Loader2 size={40} className="animate-spin text-[var(--color-brand-forest)]" />
+                <span className="mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-forest)]">
+                  {t.regeneratingCard}
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -295,8 +281,8 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
             src={pet.characterSheetUrl} 
             alt="Character Sheet"
             className={cn(
-              "h-full w-full object-cover transition-all duration-700",
-              isRegenerating && "scale-110 blur-sm opacity-50"
+              "h-full w-full object-cover transition-all duration-1000",
+              isRegenerating && "scale-110 blur-md opacity-40"
             )}
             onLoad={(e) => {
               const w = e.currentTarget.naturalWidth || 0;
@@ -305,39 +291,39 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
             }}
           />
         </div>
+        
+        <button
+          onClick={handleRegenerateCharacterSheet}
+          disabled={isRegenerating}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-white py-4 text-xs font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/40 hover:text-[var(--color-brand-forest)] ring-1 ring-[var(--color-brand-stone)]/5 shadow-soft transition-all active:scale-95"
+        >
+          <RotateCcw size={14} />
+          <span>{t.regenerateCard}</span>
+        </button>
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 pb-4">
-        <ActionButton 
-          onClick={handleShare} 
-          icon={<Share2 size={18} />} 
-          label={t.shareProfile}
-          variant="secondary"
-        />
-        {showDevTools ? (
-          <>
-            <ActionButton 
-              onClick={handleDownloadCharacterSheet} 
-              icon={<Download size={18} />} 
-              label={t.downloadCharacterSheet}
-              variant="secondary"
-            />
-            <ActionButton
-              onClick={handleDownloadOriginalPhoto}
-              icon={<Download size={18} />}
-              label={t.downloadOriginalPhoto}
-              variant="secondary"
-            />
-          </>
-        ) : (
-          <div />
-        )}
+      <div className="space-y-4 pb-12">
+        <div className="grid grid-cols-2 gap-4">
+          <ActionButton 
+            onClick={handleShare} 
+            icon={<Share2 size={20} />} 
+            label={t.shareProfile}
+            variant="secondary"
+          />
+          <ActionButton 
+            onClick={handleDownloadCharacterSheet} 
+            icon={<Download size={20} />} 
+            label={t.downloadCharacterSheet}
+            variant="secondary"
+          />
+        </div>
+        
         <button
           onClick={onReset}
-          className="flex items-center justify-center gap-2 py-4 text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-orange-500"
+          className="w-full flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/20 hover:text-red-400 transition-colors"
         >
-          <RotateCcw size={14} />
+          <X size={14} />
           <span>{t.resetAndRescan}</span>
         </button>
       </div>

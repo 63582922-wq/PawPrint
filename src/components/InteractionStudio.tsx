@@ -39,6 +39,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   const [isMuted, setIsMuted] = useState(true);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [interactionStep, setInteractionStep] = useState<'idle' | 'analyzing' | 'rendering' | 'finalizing'>('idle');
   const [needsKey, setNeedsKey] = useState(false);
   const [scenePublicUrl, setScenePublicUrl] = useState<string>("");
@@ -74,9 +75,14 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
 
   if (!pet) {
     return (
-      <div className="flex flex-col items-center justify-center p-10 text-center">
-        <h2 className="text-xl font-bold">{t.noPetTitle}</h2>
-        <p className="mt-2 text-gray-500">{t.noPetDesc}</p>
+      <div className="flex flex-col items-center justify-center p-10 text-center space-y-4">
+        <div className="rounded-full bg-[var(--color-brand-sand)] p-6 text-[var(--color-brand-forest)]">
+          <Sparkles size={48} />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold text-[var(--color-brand-forest)]">{t.noPetTitle}</h2>
+          <p className="text-sm text-[var(--color-brand-stone)]/60">{t.noPetDesc}</p>
+        </div>
       </div>
     );
   }
@@ -102,6 +108,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         setIsMuted(true);
         setIsConfirming(false);
         setIsSaved(false);
+        setShowDrawer(true);
         setScenePublicUrl("");
         setCharacterCardPublicUrl("");
         setReferencePhotoPublicUrl("");
@@ -120,6 +127,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
     }
 
     setIsConfirming(false);
+    setShowDrawer(false);
 
     if (showDevTools) {
       try {
@@ -176,7 +184,6 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
       console.log("Generating with prompt:", prompt);
       setInteractionStep('rendering');
       
-      // 2. Real Video Generation with Veo (Ingredients mode)
       const cardForVideo = showDevTools
         ? (characterCardPublicUrl.trim() || (pet.characterSheetUrl || ""))
         : (pet.characterSheetUrl || "");
@@ -235,17 +242,6 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
     };
     
     onSave(newInteraction);
-    alert(t.memorySaved);
-  };
-
-  const copyVideoLink = async () => {
-    if (!generatedResult) return;
-    try {
-      await navigator.clipboard.writeText(generatedResult);
-      alert(t.linkCopied || "Video link copied.");
-    } catch (e) {
-      prompt(t.copyManually || "Copy this video link:", generatedResult);
-    }
   };
 
   const downloadVideo = () => {
@@ -271,12 +267,12 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold">{t.interactionStudio}</h2>
-        <p className="text-gray-500">{t.interactionStudioDesc.replace('{name}', pet.name)}</p>
+      <div className="text-center space-y-1">
+        <h2 className="text-3xl font-black tracking-tight text-[var(--color-brand-forest)]">{t.interactionStudio}</h2>
+        <p className="text-sm text-[var(--color-brand-stone)]/60">{t.interactionStudioDesc.replace('{name}', pet.name)}</p>
       </div>
 
-      <div className="relative aspect-[9/16] overflow-hidden rounded-[2.5rem] bg-gray-900 shadow-2xl">
+      <div className="relative mx-auto aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-[var(--radius-3xl)] bg-[var(--color-brand-stone)]/90 shadow-bloom ring-8 ring-white">
         <AnimatePresence mode="wait">
           {!sceneImage ? (
             <motion.div
@@ -287,15 +283,17 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
               className="flex h-full flex-col items-center justify-center p-8 text-center text-white"
             >
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md">
-                <Camera size={40} />
+                <Camera size={40} strokeWidth={1.5} />
               </div>
-              <h3 className="text-xl font-bold">{t.captureScene}</h3>
-              <p className="mt-4 text-sm opacity-60">
-                {t.captureDesc.replace('{name}', pet.name)}
-              </p>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold">{t.captureScene}</h3>
+                <p className="text-sm opacity-60">
+                  {t.captureDesc.replace('{name}', pet.name)}
+                </p>
+              </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-10 rounded-2xl bg-white px-8 py-4 font-bold text-gray-900 shadow-xl transition-transform active:scale-95"
+                className="mt-10 rounded-full bg-white px-10 py-4 font-black text-[var(--color-brand-forest)] shadow-xl transition-transform active:scale-95"
               >
                 {t.scanEnvironment}
               </button>
@@ -307,154 +305,84 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
               animate={{ opacity: 1 }}
               className="group relative h-full w-full"
             >
-              <img src={sceneImage} alt="Scene" className="h-full w-full object-cover opacity-60 blur-sm grayscale" />
+              <img src={sceneImage} alt="Scene" className="h-full w-full object-cover opacity-60 blur-md" />
               <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-white">
                 {showDevTools && needsKey ? (
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg">
+                  <div className="flex flex-col items-center justify-center text-center w-full">
+                    <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--color-brand-clay)] text-white shadow-bloom">
                       <Key size={32} />
                     </div>
                     <h3 className="text-xl font-bold uppercase tracking-tight">{t.apiKeyRequiredTitle}</h3>
                     <p className="mt-2 text-sm opacity-80 max-w-[250px]">
                       {t.dashscopeKeyRequiredDesc}
                     </p>
-                    <a 
-                      href="https://dashscope.console.aliyun.com/apiKey" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="mt-2 text-[10px] underline opacity-60"
-                    >
-                      {t.getApiKeyLink}
-                    </a>
-                    <div className="mt-6 w-full max-w-[320px]">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
-                        {t.dashscopeKeyLabel}
-                      </label>
-                      <input
-                        value={dashscopeKeyDraft}
-                        onChange={(e) => setDashscopeKeyDraft(e.target.value)}
-                        placeholder={t.dashscopeKeyPlaceholder}
-                        type="password"
-                        className="mt-2 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
-                      />
-                      <p className="mt-2 text-[10px] opacity-60">
-                        {t.dashscopeKeyNote}
-                      </p>
+                    <div className="mt-8 w-full space-y-4">
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
+                          {t.dashscopeKeyLabel}
+                        </label>
+                        <input
+                          value={dashscopeKeyDraft}
+                          onChange={(e) => setDashscopeKeyDraft(e.target.value)}
+                          placeholder={t.dashscopeKeyPlaceholder}
+                          type="password"
+                          className="w-full rounded-2xl bg-white/10 px-4 py-4 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-[var(--color-brand-clay)]"
+                        />
+                      </div>
+                      <button
+                        onClick={openKeySelector}
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl bg-[var(--color-brand-clay)] py-4 font-bold shadow-xl transition-all active:scale-95"
+                      >
+                        <Save size={20} />
+                        {t.saveAndContinue}
+                      </button>
+                      <a 
+                        href="https://dashscope.console.aliyun.com/apiKey" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block text-[10px] underline opacity-40"
+                      >
+                        {t.getApiKeyLink}
+                      </a>
                     </div>
-          <button
-            onClick={openKeySelector}
-            className={cn(
-              "mt-8 flex items-center gap-2 rounded-2xl bg-orange-500 px-8 py-4 font-bold shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100",
-              isGenerating && "opacity-50 cursor-not-allowed"
-            )}
-            disabled={isGenerating}
-          >
-            {isGenerating ? <Loader2 className="animate-spin" /> : <Key size={20} />}
-            {isGenerating ? t.checking : t.saveAndContinue}
-          </button>
                   </div>
                 ) : isGenerating ? (
-                  <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-6">
                     <div className="relative">
-                      <Loader2 size={48} className="animate-spin text-orange-500" />
-                      <Sparkles size={20} className="absolute -right-2 -top-2 animate-pulse text-yellow-400" />
+                      <Loader2 size={64} className="animate-spin text-white" />
+                      <Sparkles size={24} className="absolute -right-2 -top-2 animate-pulse text-[var(--color-brand-clay)]" />
                     </div>
-                    <div className="text-center">
-                      <p className="font-bold uppercase tracking-widest text-orange-500">
+                    <div className="text-center space-y-2">
+                      <p className="text-xl font-black uppercase tracking-[0.2em]">
                         {interactionStep === 'analyzing' ? t.analyzing : interactionStep === 'rendering' ? t.generatingVideo : t.extracting}
                       </p>
-                      <p className="mt-2 text-xs opacity-60">
-                        {interactionStep === 'analyzing' ? 'Understanding your room...' : interactionStep === 'rendering' ? 'Directing the action...' : 'Finalizing pixels...'}
+                      <p className="text-xs opacity-60">
+                        {interactionStep === 'analyzing' ? 'Understanding the environment...' : interactionStep === 'rendering' ? 'Breathing life into pixels...' : 'Almost there...'}
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/30">
-                      <Wand2 size={32} />
+                  <div className="flex flex-col items-center justify-center w-full space-y-6">
+                    <div className="rounded-full bg-white/10 p-6 text-white backdrop-blur-md">
+                      <Sparkles size={48} />
                     </div>
-                    <h3 className="text-xl font-bold uppercase tracking-tight">{t.envMappingReady}</h3>
-                    <p className="mt-2 text-center text-sm opacity-80">
-                      {t.envMappingDesc.replace('{name}', pet.name)}
-                    </p>
-                    <button
-                      onClick={() => setAutoPrompt((v) => !v)}
-                      className={cn(
-                        "mt-4 flex items-center justify-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest backdrop-blur-md transition-colors",
-                        autoPrompt ? "bg-white/20 text-white" : "bg-white/10 text-white/60"
-                      )}
-                    >
-                      {autoPrompt ? t.autoPromptOn : t.autoPromptOff}
-                    </button>
-                    <div className="mt-6 w-full max-w-[320px]">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
-                        {t.actionLabel}
-                      </label>
-                      <textarea
-                        value={actionText}
-                        onChange={(e) => setActionText(e.target.value)}
-                        placeholder={t.actionPlaceholder}
-                        rows={3}
-                        className="mt-2 w-full resize-none rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
-                      />
-                      <p className="mt-2 text-[10px] leading-relaxed opacity-60">
-                        {t.videoUsesReferences ||
-                          "视频生成会自动使用：角色卡 + 原始照片 + 场景图作为参考图（无需导出/粘贴 ID）。"}
-                      </p>
-                      {showDevTools && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-[10px] leading-relaxed opacity-60">
-                          {t.publicUrlHint || "提示：Vidu 参考生视频通常要求参考图是公网 http(s) URL。若你遇到参考不生效/报错，可把角色卡、原图、场景图上传到图床/OSS，并在下方粘贴 URL。"}
-                        </p>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
-                          {t.sceneUrlLabel || "（可选）场景图公网 URL"}
-                        </label>
-                        <input
-                          value={scenePublicUrl}
-                          onChange={(e) => setScenePublicUrl(e.target.value)}
-                          placeholder={t.sceneUrlPlaceholder || "https://..."}
-                          className="mt-1 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
-                        />
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
-                          {t.cardUrlLabel || "（可选）角色卡公网 URL"}
-                        </label>
-                        <input
-                          value={characterCardPublicUrl}
-                          onChange={(e) => setCharacterCardPublicUrl(e.target.value)}
-                          placeholder={t.cardUrlPlaceholder || "https://..."}
-                          className="mt-1 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
-                        />
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-white/70">
-                          {t.refUrlLabel || "（可选）宠物原始照片公网 URL"}
-                        </label>
-                        <input
-                          value={referencePhotoPublicUrl}
-                          onChange={(e) => setReferencePhotoPublicUrl(e.target.value)}
-                          placeholder={t.refUrlPlaceholder || "https://..."}
-                          className="mt-1 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400"
-                        />
-                      </div>
-                      )}
+                    <div className="text-center space-y-1">
+                      <h3 className="text-xl font-bold">{t.envMappingReady}</h3>
+                      <p className="text-sm opacity-60">{t.envMappingDesc.replace('{name}', pet.name)}</p>
                     </div>
-                    {errorMessage && (
-                      <p className="mt-4 max-w-[280px] rounded-2xl bg-red-500/20 px-4 py-3 text-xs leading-relaxed text-red-100">
-                        {(t.generationError || "Generation error: ") + errorMessage}
-                      </p>
-                    )}
                     <button
-                      onClick={handleGenerate}
-                      className="mt-10 flex items-center gap-2 rounded-2xl bg-orange-500 px-8 py-4 font-bold shadow-xl shadow-orange-500/20 transition-transform active:scale-95"
+                      onClick={() => setShowDrawer(true)}
+                      className="rounded-full bg-white px-10 py-4 font-black text-[var(--color-brand-forest)] shadow-xl transition-transform active:scale-95"
                     >
-                      <Sparkles size={20} />
                       {t.generateInteraction}
                     </button>
                     <button
                       onClick={() => setSceneImage(null)}
-                      className="mt-4 text-xs font-bold uppercase tracking-widest opacity-60 hover:opacity-100"
+                      className="text-xs font-black uppercase tracking-widest opacity-40 hover:opacity-100"
                     >
                       {t.retakePhoto}
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -476,56 +404,54 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
                 className="h-full w-full object-cover"
               />
               {/* Cinematic Vignette */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
               
-              <div className="absolute top-8 left-0 right-0 px-6 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-[10px] font-bold text-white backdrop-blur-md">
-                   <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                   AI MOTION GEN: ACTIVE
+              <div className="absolute top-6 left-0 right-0 px-6 flex items-center justify-between">
+                <div className="flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-[10px] font-black tracking-widest text-white backdrop-blur-md">
+                   <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                   AI MOTION GEN
                 </div>
-                <button
-                  onClick={() => setIsMuted((v) => !v)}
-                  className="rounded-full bg-white/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur-md hover:bg-white/40"
-                >
-                  {isMuted ? t.unmute : t.mute}
-                </button>
-                <button 
-                  onClick={() => setGeneratedResult(null)}
-                  className="rounded-full bg-white/20 p-2 text-white backdrop-blur-md hover:bg-white/40"
-                >
-                  <RefreshCcw size={16} />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsMuted((v) => !v)}
+                    className="rounded-full bg-white/20 p-2 text-white backdrop-blur-md"
+                  >
+                    {isMuted ? <Loader2 size={16} /> : <Play size={16} fill="currentColor" />}
+                  </button>
+                  <button 
+                    onClick={() => setGeneratedResult(null)}
+                    className="rounded-full bg-white/20 p-2 text-white backdrop-blur-md"
+                  >
+                    <RefreshCcw size={16} />
+                  </button>
+                </div>
               </div>
 
-              <div className="absolute bottom-10 left-0 right-0 px-6 space-y-4">
+              <div className="absolute bottom-10 left-0 right-0 px-8 space-y-6">
                 <div className="space-y-1">
-                  <h4 className="text-xl font-bold text-white">{t.interactionComplete}</h4>
-                  <p className="text-sm text-white/70">{t.happyHere.replace('{name}', pet.name)}</p>
+                  <h4 className="text-2xl font-black text-white">{t.interactionComplete}</h4>
+                  <p className="text-sm text-white/60">{t.happyHere.replace('{name}', pet.name)}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={saveToMemories}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-white py-4 font-black text-gray-900 shadow-xl transition-transform active:scale-95"
+                    disabled={isSaved}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-2xl py-4 font-black shadow-xl transition-all active:scale-95",
+                      isSaved ? "bg-green-500 text-white" : "bg-white text-[var(--color-brand-forest)]"
+                    )}
                   >
-                    <Save size={18} />
-                    {t.saveMemory}
+                    <Save size={20} />
+                    {isSaved ? "Saved" : t.saveMemory}
                   </button>
                   <button
                     onClick={downloadVideo}
-                    className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-transform active:scale-95"
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-white/20 py-4 font-black text-white backdrop-blur-md transition-all active:scale-95"
                   >
-                    <Play size={18} fill="currentColor" />
+                    <Play size={20} fill="currentColor" />
                     {t.downloadVideo}
                   </button>
                 </div>
-                {showDevTools && (
-                  <button
-                    onClick={copyVideoLink}
-                    className="w-full rounded-2xl bg-white/10 py-3 text-xs font-black uppercase tracking-widest text-white/80 backdrop-blur-md transition-transform active:scale-95"
-                  >
-                    {t.copyVideoLink}
-                  </button>
-                )}
               </div>
             </motion.div>
           )}
@@ -540,78 +466,131 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         className="hidden" 
       />
 
-      {/* Reference Confirmation Modal */}
+      {/* Action Drawer */}
       <AnimatePresence>
-        {isConfirming && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center">
+        {showDrawer && sceneImage && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="w-full max-w-lg overflow-hidden rounded-[2.5rem] bg-white p-6 shadow-2xl"
+              className="w-full max-w-lg rounded-t-[var(--radius-3xl)] bg-white p-8 shadow-2xl"
             >
-              <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-xl font-bold">{t.confirmReferences}</h3>
+              <div className="mb-8 flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-2xl font-black text-[var(--color-brand-forest)]">{t.generateInteraction}</h3>
+                  <p className="text-xs text-[var(--color-brand-stone)]/40 uppercase tracking-widest">{t.actionLabel}</p>
+                </div>
                 <button 
-                  onClick={() => setIsConfirming(false)}
-                  className="rounded-full bg-gray-100 p-2 text-gray-400 hover:bg-gray-200"
+                  onClick={() => setShowDrawer(false)}
+                  className="rounded-full bg-[var(--color-brand-sand)] p-2 text-[var(--color-brand-stone)]/40"
                 >
-                  <X size={20} />
+                  <X size={24} />
                 </button>
               </div>
 
               <div className="space-y-6">
-                {/* References Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t.sceneReference}</p>
-                    <div className="aspect-[9/16] overflow-hidden rounded-2xl bg-gray-100">
-                      <img src={sceneImage!} alt="Scene" className="h-full w-full object-cover" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t.identityReference}</p>
-                    <div className="aspect-[9/16] overflow-hidden rounded-2xl bg-gray-100">
-                      <img src={pet.characterSheetUrl} alt="Identity" className="h-full w-full object-cover" />
-                    </div>
-                  </div>
+                <textarea
+                  value={actionText}
+                  onChange={(e) => setActionText(e.target.value)}
+                  placeholder={t.actionPlaceholder}
+                  rows={4}
+                  className="w-full resize-none rounded-[var(--radius-3xl)] bg-[var(--color-brand-sand)] p-6 text-lg font-bold text-[var(--color-brand-forest)] placeholder:text-[var(--color-brand-forest)]/20 focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-forest)]/10"
+                />
+
+                <div className="flex items-center justify-between rounded-2xl bg-[var(--color-brand-sand)] p-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-[var(--color-brand-forest)]/60">
+                    {t.autoPromptOn}
+                  </span>
+                  <button
+                    onClick={() => setAutoPrompt(!autoPrompt)}
+                    className={cn(
+                      "h-6 w-12 rounded-full transition-colors relative",
+                      autoPrompt ? "bg-[var(--color-brand-forest)]" : "bg-[var(--color-brand-stone)]/20"
+                    )}
+                  >
+                    <motion.div 
+                      animate={{ x: autoPrompt ? 24 : 4 }}
+                      className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
                 </div>
 
-                {/* Action Summary */}
-                <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-400">{t.actionReference}</p>
-                  <p className="mt-1 text-sm font-medium text-orange-900">
-                    {actionText.trim() || t.actionPlaceholder}
+                {errorMessage && (
+                  <p className="rounded-2xl bg-red-50 p-4 text-xs font-bold text-red-500 ring-1 ring-red-100">
+                    {errorMessage}
                   </p>
-                </div>
+                )}
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setIsConfirming(false)}
-                    className="flex-1 rounded-2xl bg-gray-100 py-4 font-bold text-gray-600 transition-transform active:scale-95"
-                  >
-                    {t.cancel}
-                  </button>
-                  <button
-                    onClick={handleGenerate}
-                    className="flex-[2] rounded-2xl bg-orange-500 py-4 font-bold text-white shadow-xl shadow-orange-500/20 transition-transform active:scale-95"
-                  >
-                    {t.confirmStart}
-                  </button>
-                </div>
+                <button
+                  onClick={handleGenerate}
+                  className="w-full flex items-center justify-center gap-3 rounded-[var(--radius-3xl)] bg-[var(--color-brand-forest)] py-5 text-xl font-black text-white shadow-bloom transition-all active:scale-95"
+                >
+                  <Sparkles size={24} />
+                  <span>{t.confirmStart}</span>
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      <div className="flex items-start gap-4 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-        <div className="rounded-2xl bg-orange-100 p-3 text-orange-500">
-          <Sparkles size={24} />
+      {/* Confirmation Overlay (Visual) */}
+      <AnimatePresence>
+        {isConfirming && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm space-y-8 text-center"
+            >
+              <div className="space-y-2">
+                <h3 className="text-3xl font-black text-white">{t.confirmReferences}</h3>
+                <p className="text-sm text-white/60">AI is ready to direct the scene</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="aspect-[9/16] overflow-hidden rounded-2xl ring-4 ring-white/10">
+                    <img src={sceneImage!} alt="Scene" className="h-full w-full object-cover" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/40">{t.sceneReference}</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="aspect-[9/16] overflow-hidden rounded-2xl ring-4 ring-white/10">
+                    <img src={pet.characterSheetUrl} alt="Pet" className="h-full w-full object-cover" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/40">{t.identityReference}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setIsConfirming(false)}
+                  className="flex-1 rounded-2xl bg-white/10 py-4 font-black text-white backdrop-blur-md"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleGenerate}
+                  className="flex-[2] rounded-2xl bg-white py-4 font-black text-[var(--color-brand-forest)] shadow-2xl"
+                >
+                  {t.confirmStart}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex items-start gap-5 rounded-[var(--radius-3xl)] bg-white p-6 shadow-soft ring-1 ring-[var(--color-brand-sand)]">
+        <div className="rounded-2xl bg-[var(--color-brand-sand)] p-4 text-[var(--color-brand-forest)]">
+          <Sparkles size={28} strokeWidth={1.5} />
         </div>
-        <div>
-          <h4 className="text-sm font-bold">{t.aiTip}</h4>
-          <p className="mt-0.5 text-xs text-gray-500">
+        <div className="space-y-1">
+          <h4 className="text-sm font-black uppercase tracking-widest text-[var(--color-brand-forest)]">{t.aiTip}</h4>
+          <p className="text-xs leading-relaxed text-[var(--color-brand-stone)]/60">
             {t.aiTipDesc.replace('{name}', pet.name)}
           </p>
         </div>

@@ -4,10 +4,25 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", sans-serif;
+
+  /* Organic Design System Tokens */
+  --color-brand-warm-white: #FDFCF8;
+  --color-brand-forest: #2D5A27;
+  --color-brand-clay: #D97706;
+  --color-brand-stone: #4B5563;
+  --color-brand-sand: #F3F4F1;
+
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-3xl: 32px;
+  --radius-full: 9999px;
+
+  --shadow-soft: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
+  --shadow-bloom: 0 20px 40px -15px rgba(45, 90, 39, 0.15);
 }
 
 body {
-  @apply antialiased overflow-x-hidden;
+  @apply antialiased overflow-x-hidden bg-[var(--color-brand-warm-white)] text-[var(--color-brand-stone)];
   -webkit-tap-highlight-color: transparent;
 }
 
