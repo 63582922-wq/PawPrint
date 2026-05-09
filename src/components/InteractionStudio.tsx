@@ -583,18 +583,6 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
           </div>
         )}
       </AnimatePresence>
-
-      <div className="flex items-start gap-5 rounded-[var(--radius-3xl)] bg-white p-6 shadow-soft ring-1 ring-[var(--color-brand-sand)]">
-        <div className="rounded-2xl bg-[var(--color-brand-sand)] p-4 text-[var(--color-brand-forest)]">
-          <Sparkles size={28} strokeWidth={1.5} />
-        </div>
-        <div className="space-y-1">
-          <h4 className="text-sm font-black uppercase tracking-widest text-[var(--color-brand-forest)]">{t.aiTip}</h4>
-          <p className="text-xs leading-relaxed text-[var(--color-brand-stone)]/60">
-            {t.aiTipDesc.replace('{name}', pet.name)}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

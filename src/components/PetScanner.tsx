@@ -332,16 +332,6 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
           </AnimatePresence>
         </button>
       </div>
-
-      <div className="rounded-[var(--radius-3xl)] bg-[var(--color-brand-sand)] p-6 text-[var(--color-brand-forest)]/80">
-        <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em]">
-          <Sparkles size={16} />
-          <span>{t.howItWorks}</span>
-        </div>
-        <p className="text-sm leading-relaxed opacity-70">
-          {t.howItWorksDesc}
-        </p>
-      </div>
     </div>
   );
 }
