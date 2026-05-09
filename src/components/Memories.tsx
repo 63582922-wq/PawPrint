@@ -13,6 +13,12 @@ interface MemoriesProps {
 export default function Memories({ interactions, t, pet, onDelete }: MemoriesProps) {
   const petInteractions = interactions.filter(i => i.petId === pet?.id);
 
+  const handleDelete = (id: string) => {
+    if (window.confirm(t.clearDataConfirm)) {
+      onDelete(id);
+    }
+  };
+
   if (petInteractions.length === 0) {
     return (
       <div className="flex h-96 flex-col items-center justify-center p-8 text-center">
@@ -57,7 +63,7 @@ export default function Memories({ interactions, t, pet, onDelete }: MemoriesPro
             
             <div className="absolute top-3 right-3">
               <button 
-                onClick={() => onDelete(interaction.id)}
+                onClick={() => handleDelete(interaction.id)}
                 className="rounded-full bg-black/40 p-2 text-white backdrop-blur-md opacity-0 transition-opacity group-hover:opacity-100"
               >
                 <Trash2 size={14} />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Sparkles, Wand2, Loader2, Play, Save, RefreshCcw, Image as ImageIcon, Key } from 'lucide-react';
+import { Camera, Sparkles, Wand2, Loader2, Play, Save, RefreshCcw, Image as ImageIcon, Key, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PetID, InteractionVideo } from '../types';
 import { compileVideoUserIntentToPrompt, describeSceneImage, ensureTempPublicImageUrl, generateInteractivePrompt, generatePetVideo, sanitizeVideoPromptText, setDashscopeApiKey } from '../services/geminiService';
@@ -37,6 +37,8 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   });
   const [dashscopeKeyDraft, setDashscopeKeyDraft] = useState<string>("");
   const [isMuted, setIsMuted] = useState(true);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [interactionStep, setInteractionStep] = useState<'idle' | 'analyzing' | 'rendering' | 'finalizing'>('idle');
   const [needsKey, setNeedsKey] = useState(false);
   const [scenePublicUrl, setScenePublicUrl] = useState<string>("");
@@ -98,6 +100,8 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         });
         setDashscopeKeyDraft("");
         setIsMuted(true);
+        setIsConfirming(false);
+        setIsSaved(false);
         setScenePublicUrl("");
         setCharacterCardPublicUrl("");
         setReferencePhotoPublicUrl("");
@@ -108,6 +112,14 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
 
   const handleGenerate = async () => {
     if (!sceneImage) return;
+
+    // Show confirmation modal first
+    if (!isConfirming) {
+      setIsConfirming(true);
+      return;
+    }
+
+    setIsConfirming(false);
 
     if (showDevTools) {
       try {
@@ -210,8 +222,9 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
   };
 
   const saveToMemories = async () => {
-    if (!generatedResult || !sceneImage) return;
+    if (!generatedResult || !sceneImage || isSaved) return;
     
+    setIsSaved(true);
     const sceneUrl = isProd ? await ensureTempPublicImageUrl(sceneImage, "pawprint-scene") : sceneImage;
     const newInteraction: InteractionVideo = {
       id: Math.random().toString(36).substr(2, 9),
@@ -222,6 +235,7 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
     };
     
     onSave(newInteraction);
+    alert(t.memorySaved);
   };
 
   const copyVideoLink = async () => {
@@ -525,6 +539,71 @@ export default function InteractionStudio({ pet, onSave, t }: InteractionStudioP
         accept="image/*" 
         className="hidden" 
       />
+
+      {/* Reference Confirmation Modal */}
+      <AnimatePresence>
+        {isConfirming && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center">
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="w-full max-w-lg overflow-hidden rounded-[2.5rem] bg-white p-6 shadow-2xl"
+            >
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xl font-bold">{t.confirmReferences}</h3>
+                <button 
+                  onClick={() => setIsConfirming(false)}
+                  className="rounded-full bg-gray-100 p-2 text-gray-400 hover:bg-gray-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* References Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t.sceneReference}</p>
+                    <div className="aspect-[9/16] overflow-hidden rounded-2xl bg-gray-100">
+                      <img src={sceneImage!} alt="Scene" className="h-full w-full object-cover" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t.identityReference}</p>
+                    <div className="aspect-[9/16] overflow-hidden rounded-2xl bg-gray-100">
+                      <img src={pet.characterSheetUrl} alt="Identity" className="h-full w-full object-cover" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Summary */}
+                <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-orange-400">{t.actionReference}</p>
+                  <p className="mt-1 text-sm font-medium text-orange-900">
+                    {actionText.trim() || t.actionPlaceholder}
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setIsConfirming(false)}
+                    className="flex-1 rounded-2xl bg-gray-100 py-4 font-bold text-gray-600 transition-transform active:scale-95"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    onClick={handleGenerate}
+                    className="flex-[2] rounded-2xl bg-orange-500 py-4 font-bold text-white shadow-xl shadow-orange-500/20 transition-transform active:scale-95"
+                  >
+                    {t.confirmStart}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="flex items-start gap-4 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
         <div className="rounded-2xl bg-orange-100 p-3 text-orange-500">

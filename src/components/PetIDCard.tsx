@@ -274,10 +274,30 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
           </span>
         </div>
         <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-gray-200 shadow-inner">
+          <AnimatePresence>
+            {isRegenerating && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-sm"
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 size={32} className="animate-spin text-orange-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-600">
+                    {t.regeneratingCard}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <img 
             src={pet.characterSheetUrl} 
             alt="Character Sheet"
-            className="h-full w-full object-cover"
+            className={cn(
+              "h-full w-full object-cover transition-all duration-700",
+              isRegenerating && "scale-110 blur-sm opacity-50"
+            )}
             onLoad={(e) => {
               const w = e.currentTarget.naturalWidth || 0;
               const h = e.currentTarget.naturalHeight || 0;
