@@ -1,9 +1,9 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Inter:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=ZCOOL+KuaiLe&family=Inter:wght@400;700&display=swap');
 
 @theme {
-  --font-sans: "Comfortaa", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Comfortaa", cursive;
+  --font-sans: "Comfortaa", "ZCOOL KuaiLe", "Quicksand", "Arial Rounded MT Bold", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "STHeiti", sans-serif;
+  --font-display: "Comfortaa", "ZCOOL KuaiLe", cursive;
 
   /* Organic Design System Tokens */
   --color-brand-warm-white: #FDFCF8;
@@ -23,7 +23,13 @@
 
 body {
   @apply antialiased overflow-x-hidden bg-[var(--color-brand-warm-white)] text-[var(--color-brand-stone)];
+  font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure all interactive elements inherit the font */
+button, input, textarea, select {
+  font-family: inherit;
 }
 
 /* Custom scrollbar for mobile feel */
