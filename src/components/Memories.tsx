@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PetID, InteractionVideo } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Trash2, Heart, X, AlertCircle } from 'lucide-react';
 
 interface MemoriesProps {

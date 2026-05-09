@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, X, Loader2, Sparkles, Wand2, Plus, PartyPopper, ArrowRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { PetID } from '../types';
 import { analyzePetProfileFromImages, ensureTempPublicImageUrl, generateCharacterSheet } from '../services/geminiService';
 import { cn } from '../lib/utils';

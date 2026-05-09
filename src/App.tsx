@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Camera, 
   IdCard, 
@@ -27,6 +27,7 @@ import SettingsModal from './components/SettingsModal';
 import Onboarding from './components/Onboarding';
 
 export default function App() {
+  console.log("App mounting...");
   const [activeTab, setActiveTab] = useState<'home' | 'interact' | 'memories'>('home');
   const [petID, setPetID] = useState<PetID | null>(null);
   const [interactions, setInteractions] = useState<InteractionVideo[]>([]);

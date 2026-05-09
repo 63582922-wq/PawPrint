@@ -1,3 +1,4 @@
+@charset "UTF-8";
 @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=ZCOOL+KuaiLe&display=swap');
 @import "tailwindcss";
 
@@ -6,35 +7,40 @@
   --font-display: "Comfortaa", "ZCOOL KuaiLe", "STYuanti-SC-Regular", "Yuanti SC", cursive;
 
   /* Organic Design System Tokens */
-  --color-brand-warm-white: #FDFCF8;
   --color-brand-forest: #2D5A27;
+  --color-brand-warm-white: #FDFCF8;
   --color-brand-clay: #D97706;
-  --color-brand-stone: #4B5563;
-  --color-brand-sand: #F3F4F1;
+  --color-brand-sand: #F3F1E8;
+  --color-brand-stone: #4A4A4A;
 
-  --radius-xl: 20px;
-  --radius-2xl: 28px;
   --radius-3xl: 32px;
-  --radius-full: 9999px;
+  --radius-2xl: 24px;
+  --radius-xl: 16px;
 
-  --shadow-soft: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
-  --shadow-bloom: 0 20px 40px -15px rgba(45, 90, 39, 0.15);
+  --shadow-soft: 0 10px 40px -10px rgba(0, 0, 0, 0.05);
+  --shadow-bloom: 0 20px 50px -12px rgba(45, 90, 39, 0.15);
 }
 
-body {
-  @apply antialiased overflow-x-hidden bg-[var(--color-brand-warm-white)] text-[var(--color-brand-stone)];
-  font-family: var(--font-sans);
-  -webkit-tap-highlight-color: transparent;
+@layer base {
+  body {
+    @apply bg-[var(--color-brand-warm-white)] text-[var(--color-brand-stone)] antialiased;
+    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+  }
 }
 
-/* Ensure all interactive elements inherit the font */
-button, input, textarea, select {
-  font-family: inherit;
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
 }
 
-/* Custom scrollbar for mobile feel */
-::-webkit-scrollbar {
-  width: 0px;
-  background: transparent;
+.shadow-bloom {
+  box-shadow: var(--shadow-bloom);
 }
 
+/* Glassmorphism utility */
+.glass {
+  @apply bg-white/70 backdrop-blur-md border border-white/20;
+}
