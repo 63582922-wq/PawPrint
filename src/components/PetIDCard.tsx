@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PetID } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Share2, Download, RotateCcw, ShieldCheck, Fingerprint, Send, Loader2 } from 'lucide-react';
+import { Share2, Download, RotateCcw, ShieldCheck, Fingerprint, Send, Loader2, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { chatWithPet } from '../services/geminiService';
 
