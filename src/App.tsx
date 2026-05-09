@@ -14,7 +14,8 @@ import {
   Settings as SettingsIcon,
   Heart,
   ChevronRight,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { PetID, InteractionVideo } from './types';
 import { cn } from './lib/utils';
