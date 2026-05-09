@@ -529,6 +529,76 @@ app.use("/api/dashscope", async (req, res) => {
   }
 });
 
+app.post("/api/flux/generate-portrait", async (req, res) => {
+  try {
+    if (!APIYI_API_KEY) {
+      res.status(500).json({ error: "missing_apiyi_api_key" });
+      return;
+    }
+
+    const { prompt, model = "flux-2-pro", size = "1024x1024", referenceImageUrl } = req.body;
+    if (!prompt) {
+      res.status(400).json({ error: "missing_prompt" });
+      return;
+    }
+
+    // Prepare body for APIYI
+    // APIYI's FLUX supports OpenAI format for generations
+    const upstreamUrl = `https://api.apiyi.com/v1/images/generations`;
+    const body = {
+      model,
+      prompt,
+      size,
+      n: 1,
+      // If we want to support image reference in generations (FLUX.2), we might need different endpoint
+      // but let's start with standard text-to-image with character description
+    };
+
+    const upstreamRes = await undiciFetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${APIYI_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+
+    const text = await upstreamRes.text();
+    if (!upstreamRes.ok) {
+      res.status(upstreamRes.status).send(text);
+      return;
+    }
+
+    const json = JSON.parse(text);
+    const remoteUrl = json.data?.[0]?.url;
+    if (!remoteUrl) {
+      res.status(502).json({ error: "no_image_url_returned" });
+      return;
+    }
+
+    // Download immediately because BFL URLs expire in 10 mins
+    const imgRes = await undiciFetch(remoteUrl, {
+      method: "GET",
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+
+    if (!imgRes.ok) {
+      res.status(502).json({ error: "failed_to_download_flux_image", remoteUrl });
+      return;
+    }
+
+    const ab = await imgRes.arrayBuffer();
+    const buf = Buffer.from(ab);
+    const mimeType = String(imgRes.headers.get("content-type") || "image/jpeg").toLowerCase();
+    
+    const localUrl = writeBase64ImageToUploads(buf.toString("base64"), mimeType, "flux-portrait");
+    res.json({ url: localUrl });
+  } catch (e) {
+    res.status(500).json({ error: "flux_generation_failed", message: String(e?.message || e) });
+  }
+});
+
 app.use("/api/openai", async (req, res) => {
   try {
     if (!APIYI_API_KEY) {

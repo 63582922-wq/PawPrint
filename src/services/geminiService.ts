@@ -763,11 +763,32 @@ export async function generatePetVideo(
     const taskId = createData.output?.task_id;
     if (!taskId) throw new Error("No task_id returned from DashScope API.");
     return await pollTaskUntilDone(taskId);
-
   } catch (error) {
     console.error("Video Generation Error:", error);
     throw error;
   }
+}
+
+export async function generateFluxPortrait(visualPrompt: string, stylePrompt: string, options?: { model?: string; size?: string }) {
+  const { model = "flux-2-pro", size = "1024x1024" } = options || {};
+  
+  // Combine character description with the style/action
+  const fullPrompt = `${visualPrompt}. ${stylePrompt}. Photorealistic, high quality, consistent character.`;
+  
+  const res = await fetch("/api/flux/generate-portrait", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      prompt: fullPrompt,
+      model,
+      size,
+    }),
+  });
+  
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `FLUX generation failed (${res.status})`);
+  const parsed = JSON.parse(text || "{}");
+  return String(parsed?.url || "");
 }
 
 export async function chatWithPet(petDescription: string, userMessage: string) {
