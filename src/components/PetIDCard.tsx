@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PetID } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Share2, Download, RotateCcw, ShieldCheck, Fingerprint, Send, Loader2, Heart, X } from 'lucide-react';
+import { Share2, Download, RotateCcw, ShieldCheck, Fingerprint, Send, Loader2, Heart, X, Upload } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { chatWithPet } from '../services/geminiService';
 
@@ -85,8 +85,8 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `${pet.name}'s Profile`,
-          text: `Check out ${pet.name}, my AI Pet!`,
+          title: `PawPrint: ${pet.name}'s Digital Twin`,
+          text: `Check out ${pet.name}'s digital identity card and AI character sheet!`,
           url: window.location.href,
         });
       } catch (err) {
@@ -95,6 +95,7 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
     } else {
       try {
         await navigator.clipboard.writeText(window.location.href);
+        alert(t.linkCopied || "Link copied!");
       } catch (e) {
         alert(window.location.href);
       }
@@ -281,7 +282,7 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
             src={pet.characterSheetUrl} 
             alt="Character Sheet"
             className={cn(
-              "h-full w-full object-cover transition-all duration-1000",
+              "h-full w-full object-contain transition-all duration-1000 bg-white/50",
               isRegenerating && "scale-110 blur-md opacity-40"
             )}
             onLoad={(e) => {
@@ -291,15 +292,6 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
             }}
           />
         </div>
-        
-        <button
-          onClick={handleRegenerateCharacterSheet}
-          disabled={isRegenerating}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-white py-4 text-xs font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/40 hover:text-[var(--color-brand-forest)] ring-1 ring-[var(--color-brand-stone)]/5 shadow-soft transition-all active:scale-95"
-        >
-          <RotateCcw size={14} />
-          <span>{t.regenerateCard}</span>
-        </button>
       </div>
 
       {/* Action Buttons */}
@@ -309,7 +301,6 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
             onClick={handleShare} 
             icon={<Share2 size={20} />} 
             label={t.shareProfile}
-            variant="secondary"
           />
           <ActionButton 
             onClick={handleDownloadCharacterSheet} 
@@ -319,13 +310,21 @@ export default function PetIDCard({ pet, onReset, onUpdate, t }: PetIDCardProps)
           />
         </div>
         
-        <button
-          onClick={onReset}
-          className="w-full flex items-center justify-center gap-2 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--color-brand-stone)]/20 hover:text-red-400 transition-colors"
-        >
-          <X size={14} />
-          <span>{t.resetAndRescan}</span>
-        </button>
+        <div className="grid grid-cols-2 gap-4">
+          <ActionButton 
+            onClick={handleRegenerateCharacterSheet} 
+            icon={<RotateCcw size={20} className={isRegenerating ? "animate-spin" : ""} />} 
+            label={t.regenerateCard}
+            variant="secondary"
+            disabled={isRegenerating}
+          />
+          <ActionButton 
+            onClick={onReset} 
+            icon={<Upload size={20} />} 
+            label={t.reuploadPhotos}
+            variant="secondary"
+          />
+        </div>
       </div>
     </div>
   );
@@ -344,21 +343,24 @@ function ActionButton({
   onClick, 
   icon, 
   label, 
-  variant = 'primary' 
+  variant = 'primary',
+  disabled = false
 }: { 
   onClick: () => void; 
   icon: React.ReactNode; 
   label: string;
   variant?: 'primary' | 'secondary';
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "flex items-center justify-center gap-2 rounded-2xl py-4 font-bold transition-all active:scale-[0.98]",
+        "flex items-center justify-center gap-2 rounded-2xl py-4 font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed",
         variant === 'primary' 
-          ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20" 
-          : "bg-white text-gray-600 ring-1 ring-gray-100 shadow-sm"
+          ? "bg-[var(--color-brand-forest)] text-white shadow-bloom" 
+          : "bg-white text-[var(--color-brand-stone)] ring-1 ring-[var(--color-brand-sand)] shadow-soft hover:bg-[var(--color-brand-sand)]"
       )}
     >
       {icon}
