@@ -402,20 +402,21 @@ export function sanitizeVideoPromptText(text: string) {
 }
 
 export function compileVideoUserIntentToPrompt(intent: string) {
-  const cleaned = sanitizeVideoPromptText(String(intent || "")).replace(/\s+/g, " ").trim();
-  const sentences = cleaned
-    .split(/[\n。！？!?]+/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const coreRaw = (sentences.slice(0, 2).join("，") || "宠物跑向镜头并在镜头前方小范围互动").trim();
-  const core = coreRaw.length > 60 ? `${coreRaw.slice(0, 60)}…` : coreRaw;
-
-  return [
-    "竖屏 9:16，第一视角手机镜头。",
-    "镜头角度与构图必须严格保持在场景图的视角范围内；禁止转向到场景图之外，禁止切换新角度/环绕/俯拍/反打。",
-    "场景必须与场景图一致：不新增/不删除/不移动主要物体，不改变空间布局与光照方向。",
-    `宠物动作（保持简单可执行）：${core}。`,
-  ].join("\n");
+  const normalized = intent.toLowerCase().trim();
+  
+  // Rule 1: Always force vertical 9:16 framing and realistic world scale
+  let compiled = `In a vertical 9:16 frame, ${normalized}. `;
+  
+  // Rule 2: Anchor scale to the scene environment
+  compiled += `Keep the pet's size strictly realistic and proportional to the floor and furniture in <<<image_1>>>. `;
+  
+  // Rule 3: Lock camera within scene bounds
+  compiled += `Maintain the original camera perspective of <<<image_1>>> without adding unseen areas. `;
+  
+  // Rule 4: Action focus
+  compiled += `The action should be a single, natural movement of <<<image_2>>>. `;
+  
+  return compiled.trim();
 }
 
 const DASHSCOPE_KEY_STORAGE = "pawprint_dashscope_api_key";
