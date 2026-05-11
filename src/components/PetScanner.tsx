@@ -165,8 +165,8 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
         <h2 className="font-display text-[26px] font-bold tracking-tight text-[var(--color-brand-stone)]">
           {t.uploadPhotos}
         </h2>
-        <p className="text-[14px] leading-relaxed text-[var(--color-brand-stone-soft)]">
-          {t.uploadPhotosHint}
+        <p className="text-[12px] text-[var(--color-brand-stone-soft)] leading-relaxed">
+          {t.uploadTips}
         </p>
       </div>
 
