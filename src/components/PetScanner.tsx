@@ -165,12 +165,7 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
         <h2 className="font-display text-[26px] font-bold tracking-tight text-[var(--color-brand-stone)]">
           {t.scan}
         </h2>
-        <div className="space-y-0.5">
-          <p className="text-[14px] font-medium text-[var(--color-brand-stone-soft)]">{t.uploadPhotos}</p>
-          <p className="text-[11px] leading-tight text-[var(--color-brand-stone-soft)] opacity-70">
-            {t.uploadPhotosSub}
-          </p>
-        </div>
+        <p className="text-[14px] text-[var(--color-brand-stone-soft)]">{t.uploadPhotos}</p>
       </div>
 
       {/* Single grouped form card */}
@@ -296,50 +291,56 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
       )}
 
       {/* Submit */}
-      <button
-        onClick={handleStartAnalysis}
-        disabled={!canSubmit}
-        className={cn(
-          'tap relative w-full overflow-hidden rounded-2xl py-4 text-[16px] font-semibold transition-all',
-          canSubmit
-            ? 'bg-[var(--color-brand-forest)] text-white shadow-bloom'
-            : 'bg-[var(--color-brand-sand)] text-[var(--color-brand-stone-soft)]/50'
-        )}
-      >
-        <AnimatePresence mode="wait">
-          {isAnalyzing ? (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="flex items-center justify-center gap-3"
-            >
-              <Loader2 size={18} className="animate-spin" />
-              <span>{status}</span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="button"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="flex items-center justify-center gap-2"
-            >
-              {!petName.trim() && images.length > 0 ? (
-                <span>{t.petName}</span>
-              ) : images.length < 1 ? (
-                <span>{t.uploadPhotos}</span>
-              ) : (
-                <>
-                  <Wand2 size={18} />
-                  <span>{t.createDigitalTwin}</span>
-                </>
-              )}
-            </motion.div>
+      <div className="space-y-3">
+        <button
+          onClick={handleStartAnalysis}
+          disabled={!canSubmit}
+          className={cn(
+            'tap relative w-full overflow-hidden rounded-2xl py-4 text-[16px] font-semibold transition-all',
+            canSubmit
+              ? 'bg-[var(--color-brand-forest)] text-white shadow-bloom'
+              : 'bg-[var(--color-brand-sand)] text-[var(--color-brand-stone-soft)]/50'
           )}
-        </AnimatePresence>
-      </button>
+        >
+          <AnimatePresence mode="wait">
+            {isAnalyzing ? (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex items-center justify-center gap-3"
+              >
+                <Loader2 size={18} className="animate-spin" />
+                <span>{status}</span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="button"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex items-center justify-center gap-2"
+              >
+                {!petName.trim() && images.length > 0 ? (
+                  <span>{t.petName}</span>
+                ) : images.length < 1 ? (
+                  <span>{t.uploadPhotos}</span>
+                ) : (
+                  <>
+                    <Wand2 size={18} />
+                    <span>{t.createDigitalTwin}</span>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </button>
+        
+        <p className="px-2 text-center text-[11px] leading-relaxed text-[var(--color-brand-stone-soft)] opacity-70">
+          {t.uploadPhotosSub}
+        </p>
+      </div>
 
       {errorStatus && (
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-[13px] text-[var(--color-danger)] ring-1 ring-red-100">
