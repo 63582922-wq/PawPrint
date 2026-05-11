@@ -19,6 +19,23 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
   const [petName, setPetName] = useState('');
   const [petGender, setPetGender] = useState<string>('Unknown');
   const [petBirthday, setPetBirthday] = useState<string>('');
+  const [birthdayParts, setBirthdayParts] = useState({
+    y: new Date().getFullYear(),
+    m: new Date().getMonth() + 1,
+    d: new Date().getDate()
+  });
+
+  const updateBirthday = (parts: Partial<{y: number, m: number, d: number}>) => {
+    const newParts = { ...birthdayParts, ...parts };
+    setBirthdayParts(newParts);
+    // Format as YYYY-MM-DD
+    const y = newParts.y;
+    const m = String(newParts.m).padStart(2, '0');
+    const d = String(newParts.d).padStart(2, '0');
+    setPetBirthday(`${y}-${m}-${d}`);
+  };
+
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
   const [status, setStatus] = useState<string>('');
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
@@ -221,12 +238,26 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
           <label className="block text-[11px] font-medium text-[var(--color-brand-stone-soft)]">
             {t.birthDate} <span className="text-[var(--color-brand-mist)]">{t.optional}</span>
           </label>
-          <input
-            type="date"
-            value={petBirthday}
-            onChange={(e) => setPetBirthday(e.target.value)}
-            className="mt-1 w-full border-none bg-transparent p-0 text-[15px] font-medium text-[var(--color-brand-stone)] focus:outline-none focus:ring-0"
-          />
+          <div className="mt-2 flex items-center gap-2">
+            <ScrollingPicker
+              value={birthdayParts.y}
+              options={Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)}
+              onChange={(y) => updateBirthday({ y })}
+              suffix="年"
+            />
+            <ScrollingPicker
+              value={birthdayParts.m}
+              options={Array.from({ length: 12 }, (_, i) => i + 1)}
+              onChange={(m) => updateBirthday({ m })}
+              suffix="月"
+            />
+            <ScrollingPicker
+              value={birthdayParts.d}
+              options={Array.from({ length: getDaysInMonth(birthdayParts.y, birthdayParts.m) }, (_, i) => i + 1)}
+              onChange={(d) => updateBirthday({ d })}
+              suffix="日"
+            />
+          </div>
         </div>
       </div>
 
@@ -348,6 +379,67 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
         </p>
       )}
 
+    </div>
+  );
+}
+
+function ScrollingPicker({ value, options, onChange, suffix }: { 
+  value: number, 
+  options: number[], 
+  onChange: (v: number) => void,
+  suffix: string 
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Initial scroll position
+  React.useEffect(() => {
+    if (containerRef.current) {
+      const index = options.indexOf(value);
+      if (index !== -1) {
+        containerRef.current.scrollTop = index * 32;
+      }
+    }
+  }, []);
+
+  const handleScroll = () => {
+    if (containerRef.current) {
+      const index = Math.round(containerRef.current.scrollTop / 32);
+      const newValue = options[index];
+      if (newValue !== undefined && newValue !== value) {
+        onChange(newValue);
+      }
+    }
+  };
+
+  return (
+    <div className="relative h-28 flex-1 overflow-hidden rounded-xl bg-[var(--color-brand-sand)]/40 ring-1 ring-[var(--color-brand-sand)]">
+      {/* Center highlight */}
+      <div className="absolute inset-x-0 top-[40px] h-8 bg-white/60 pointer-events-none ring-1 ring-[var(--color-brand-sand)]/50 shadow-sm" />
+      
+      <div 
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto no-scrollbar snap-y snap-mandatory py-[40px]"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {options.map((opt) => (
+          <div 
+            key={opt}
+            className={cn(
+              "h-8 flex items-center justify-center snap-center text-[14px] transition-all duration-200",
+              opt === value 
+                ? "font-bold text-[var(--color-brand-stone)] scale-110" 
+                : "text-[var(--color-brand-mist)] opacity-40 scale-90"
+            )}
+          >
+            {opt}{suffix}
+          </div>
+        ))}
+      </div>
+      
+      {/* Gradient overlays */}
+      <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[var(--color-brand-sand)]/40 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--color-brand-sand)]/40 to-transparent pointer-events-none" />
     </div>
   );
 }
