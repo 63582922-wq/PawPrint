@@ -163,11 +163,14 @@ export default function PetScanner({ onComplete, t }: PetScannerProps) {
       {/* Title */}
       <div className="space-y-1.5">
         <h2 className="font-display text-[26px] font-bold tracking-tight text-[var(--color-brand-stone)]">
-          {t.uploadPhotos}
+          {t.scan}
         </h2>
-        <p className="text-[12px] text-[var(--color-brand-stone-soft)] leading-relaxed">
-          {t.uploadTips}
-        </p>
+        <div className="space-y-0.5">
+          <p className="text-[14px] font-medium text-[var(--color-brand-stone-soft)]">{t.uploadPhotos}</p>
+          <p className="text-[11px] leading-tight text-[var(--color-brand-stone-soft)] opacity-70">
+            {t.uploadPhotosSub}
+          </p>
+        </div>
       </div>
 
       {/* Single grouped form card */}
